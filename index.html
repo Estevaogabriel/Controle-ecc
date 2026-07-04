@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v5 — remove import/export do código compilado antes do eval
+// BUILD v6 — neutraliza statements de modulo no codigo compilado
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1182,30 +1182,29 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v5 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v6 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
-      // Transforma JSX e converte QUALQUER import/export para CommonJS,
-      // eliminando o "import" da saída (a causa do erro no eval).
-      var opts = { presets: ["react"] };
-      try {
-        // se o plugin estiver disponível no standalone, usa-o
-        if (Babel.availablePlugins && Babel.availablePlugins["transform-modules-commonjs"]) {
-          opts.plugins = ["transform-modules-commonjs"];
-        }
-      } catch (ignore) {}
+      // Compila apenas o JSX. NÃO convertemos módulos para CommonJS, pois o
+      // navegador não tem require(). Em vez disso, removemos import/export
+      // do código compilado (o app não precisa deles — React/ReactDOM são
+      // globais carregados via <script>).
+      var out = Babel.transform(src, { presets: ["react"] }).code;
 
-      var out = Babel.transform(src, opts).code;
-
-      // Rede de segurança: se ainda sobrar import/export no código compilado,
-      // remove esses statements (cobre a forma de várias linhas). Específico
-      // para statements reais no início de linha, evitando falsos positivos.
-      if (/^\s*(import|export)\b/m.test(out)) {
-        console.warn("[ECC] Removendo import/export remanescentes do código compilado.");
-        out = out
-          .replace(/^\s*import\b[\s\S]*?;/gm, "/* import removido */")
-          .replace(/^\s*export\s+default\s+/gm, "")
-          .replace(/^\s*export\s+/gm, "");
+      // Remove statements de módulo do código compilado, cobrindo:
+      //  - import ... from "x";
+      //  - import "x";
+      //  - export default ... / export ...
+      //  - const X = require("...");  (caso algo tenha gerado require)
+      var before = out;
+      out = out
+        .replace(/^\s*import\b[\s\S]*?;\s*$/gm, "")
+        .replace(/^\s*export\s+default\s+/gm, "")
+        .replace(/^\s*export\s+/gm, "")
+        .replace(/^\s*(?:var|let|const)\s+\{?[^=;]*\}?\s*=\s*require\([^)]*\);\s*$/gm, "")
+        .replace(/\brequire\s*\([^)]*\)/g, "undefined");
+      if (out !== before) {
+        console.warn("[ECC] import/export/require removidos do código compilado.");
       }
 
       (0, eval)(out);
