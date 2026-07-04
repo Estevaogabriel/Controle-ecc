@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>XXXII ECC — Controle do Roteiro</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #F3EFE7; }
+  #root { min-height: 100vh; }
+  .ecc-loading { font-family: system-ui, sans-serif; text-align: center; padding: 60px 20px; color: #6B4E9E; }
+</style>
+</head>
+<body>
+<div id="root"><div class="ecc-loading">Carregando o controle do ECC…</div></div>
+
+<!-- React via CDN -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Babel para compilar o JSX no navegador -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- SheetJS para exportar Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+
+<!-- Firebase (Realtime Database) via CDN -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // ╔═══════════════════════════════════════════════════════════════╗
+  // ║  COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE              ║
+  // ║  (Console Firebase → Configurações do projeto → Seus apps)    ║
+  // ╚═══════════════════════════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey: "AIzaSyBu4KmOasHpI5-WLXci-p6rUCwOwgrcoWc",
+  authDomain: "ecc---recepcao.firebaseapp.com",
+  projectId: "ecc---recepcao",
+  storageBucket: "ecc---recepcao.firebasestorage.app",
+  messagingSenderId: "370972482514",
+  appId: "1:370972482514:web:9bbe960fe81d2df472860b",
+  measurementId: "G-F16H9RWRV4"
+};
+
+  // Só ativa o Firebase se a config foi preenchida
+  const configOk = firebaseConfig.apiKey && firebaseConfig.apiKey !== "SUA_API_KEY";
+  if (configOk) {
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      // Todos os dispositivos compartilham o mesmo nó "ecc/marks"
+      window.__eccDB = db;
+      window.__eccRef = ref(db, "ecc/marks");
+      window.__eccOnValue = onValue;
+      window.__eccSet = set;
+    } catch (e) {
+      console.error("Firebase falhou, rodando offline:", e);
+    }
+  }
+  // Sinaliza que a checagem do Firebase terminou (com ou sem sucesso)
+  window.__eccReady = true;
+  window.dispatchEvent(new Event("ecc-ready"));
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
+function getRole() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("mode") === "control" ? "control" : "view";
+  } catch (e) { return "view"; }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// XXXII ENCONTRO DE CASAIS COM CRISTO — Controle de Atividades
+// Modelo: cada atividade tem status (aguardando / em andamento /
+// encerrada). O atraso ("prejuízo") de cada atividade é o tempo
+// que ela passou do horário previsto de término SEM ter sido
+// encerrada. O contador só para quando o usuário marca "Encerrar".
+// ─────────────────────────────────────────────────────────────
+
+const SCHEDULE = {
+  "sexta": {
+    label: "Sexta-feira",
+    date: "2026-07-03",
+    dateLabel: "03/07/2026",
+    items: [
+      ["19:15", "15", "Sala", "Abertura do Encontro na Sala de Oração"],
+      ["19:30", "15", "Pátio", "Recepção com o Cafezinho (sem a Bandinha)"],
+      ["19:45", "15", "Pátio", "Entrada da Bandinha"],
+      ["20:00", "05", "Passeio", "Deslocamento para o Plenário"],
+      ["20:05", "05", "Plenário", "Boas vindas Pr. Gérson e Graça — Saudação do Casal Apresentador"],
+      ["20:10", "05", "Plenário", "Bandinha — É um prazer e o Hino Oficial"],
+      ["20:15", "30", "Plenário", "PALESTRA: PLANO DE DEUS — Delano & Luana"],
+      ["20:45", "40", "Plenário", "TESTEMUNHO I — Edmundo & Suzi"],
+      ["21:25", "10", "Plenário", "Avisos"],
+      ["21:35", "05", "Plenário", "Momento de Reflexão — Apresentação de Vídeo (Equipe de Som)"],
+      ["21:40", "05", "Passeio", "Saída em Silêncio"],
+    ],
+  },
+  "sabado": {
+    label: "Sábado",
+    date: "2026-07-04",
+    dateLabel: "04/07/2026",
+    items: [
+      ["07:30", "45", "Pátio", "Recepção Boa Vontade (Entrega de Crachás)"],
+      ["08:15", "05", "Pátio", "Entrada do Cafezinho (sem a Bandinha)"],
+      ["08:20", "10", "Pátio", "Entrada da Bandinha"],
+      ["08:30", "05", "Passeio", "Deslocamento para o Plenário"],
+      ["08:35", "15", "Plenário", "DEVOCIONAL: CERIMONIAL"],
+      ["08:50", "05", "Plenário", "LOUVOR com a Bandinha (Hino Oficial)"],
+      ["08:55", "40", "Plenário", "PALESTRA: HARMONIA CONJUGAL — Harim & Rose"],
+      ["09:35", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
+      ["09:40", "20", "Salas", "CÍRCULOS: HARMONIA CONJUGAL"],
+      ["10:00", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
+      ["10:05", "15", "Pátio", "CAFEZINHO, Bandinha e CORREIOS"],
+      ["10:20", "05", "Passeio", "Deslocamento para o Plenário"],
+      ["10:25", "20", "Plenário", "APRESENTAÇÃO DOS CÍRCULOS"],
+      ["10:45", "05", "Plenário", "LOUVOR com a Bandinha"],
+      ["10:50", "40", "Plenário", "PALESTRA: DIÁLOGO C/ OS FILHOS — Robson & Daniele"],
+      ["11:30", "05", "Plenário", "LOUVOR: “UTOPIA” (Bandinha entra e sai em silêncio)"],
+      ["11:35", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS (em silêncio)"],
+      ["11:40", "20", "Pátio", "CONVERSA A DOIS"],
+      ["12:00", "10", "Passeio", "Deslocamento para o ALMOÇO com a Bandinha"],
+      ["12:10", "60", "Refeitório", "ALMOÇO — Bandinha cantar agradecendo o Almoço"],
+      ["13:10", "05", "Passeio", "Deslocamento para o auditório com a Bandinha"],
+      ["13:15", "30", "Plenário", "SOCIODRAMA I: FAMÍLIA FELIZ — Josimar & Lígia"],
+      ["13:45", "05", "Passeio", "Deslocamento para os Círculos com a Bandinha"],
+      ["13:50", "30", "Salas", "CÍRCULOS: DOS CARTAZES"],
+      ["14:20", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
+      ["14:25", "20", "Plenário", "APRESENTAÇÃO DOS CARTAZES"],
+      ["14:45", "05", "Plenário", "LOUVOR com a Bandinha (01 LOUVOR)"],
+      ["14:55", "20", "Plenário", "LOUVOR com a Bandinha (pó ró pó pó - Maestro) Daniel"],
+      ["15:15", "40", "Plenário", "TESTEMUNHO II — Lavoisier & Márcia"],
+      ["15:55", "10", "Plenário", "LOUVOR: O TEMPO NÃO PODE APAGAR... (Sair em silêncio)"],
+      ["16:05", "40", "Plenário", "PALESTRA: SENTIDO DA VIDA — José Rodrigues & Cristina"],
+      ["16:45", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
+      ["16:50", "15", "Pátio", "CAFEZINHO, Bandinha e CORREIOS"],
+      ["17:05", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
+      ["17:10", "40", "Plenário", "PALESTRA: ALIANÇA & RECONCILIAÇÃO — Jones Bidart & Ana Lúcia"],
+      ["17:50", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
+      ["17:55", "20", "Salas", "CÍRCULOS: O FILHO PRÓDIGO"],
+      ["18:15", "05", "Passeio", "Deslocamento para o Plenário (Bandinha não entra)"],
+      ["18:20", "15", "Plenário", "APRESENTAÇÃO DOS CÍRCULOS"],
+      ["18:35", "40", "Plenário", "PALESTRA: SEXUALIDADE — Gilmar & Midian"],
+      ["19:15", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS"],
+      ["19:20", "20", "Pátio", "CONVERSA A DOIS"],
+      ["19:40", "10", "Passeio", "PASSEIO com a Bandinha: (Como é grande o meu amor por você)"],
+      ["19:50", "05", "Passeio", "Deslocamento para o JANTAR com a Bandinha"],
+      ["19:55", "40", "Refeitório", "JANTAR DE GALA — Bandinha (Amar Você - Fernanda Brum)"],
+      ["20:35", "10", "Refeitório", "Avisos Finais e Saída em Silêncio"],
+    ],
+  },
+  "domingo": {
+    label: "Domingo",
+    date: "2026-07-05",
+    dateLabel: "05/07/2026",
+    items: [
+      ["07:30", "45", "Pátio", "Recepção Boa Vontade (Entrega de Crachás)"],
+      ["08:15", "05", "Pátio", "Recepção com a Bandinha (sem o cafezinho)"],
+      ["08:20", "05", "Pátio", "Entrada do Cafezinho"],
+      ["08:25", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
+      ["08:30", "15", "Plenário", "DEVOCIONAL: CERIMONIAL"],
+      ["08:45", "05", "Plenário", "LOUVOR com a Bandinha (entra em silêncio e canta um Hino)"],
+      ["08:50", "40", "Plenário", "PALESTRA: O CASAL E AS FINANÇAS — Filipe & Kaline"],
+      ["09:30", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
+      ["09:35", "15", "Pátio", "CAFEZINHO com a Bandinha e CORREIOS"],
+      ["09:50", "05", "Passeio", "Deslocamento para o Plenário (Bandinha não entra)"],
+      ["09:55", "40", "Plenário", "PALESTRA: FÉ E ORAÇÃO — Josa & Rosa"],
+      ["10:35", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS (em silêncio)"],
+      ["10:40", "15", "Pátio", "CONVERSA A DOIS"],
+      ["10:55", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
+      ["11:00", "15", "Plenário", "LOUVOR com a Bandinha (pó ró pó pó - Maestro) - Daniel"],
+      ["11:15", "30", "Plenário", "PALESTRA: CASAL CRISTÃO — Vanilson & Sunamita"],
+      ["11:45", "05", "Passeio", "Deslocamento para o ALMOÇO com a Bandinha"],
+      ["11:50", "60", "Refeitório", "ALMOÇO com a Bandinha agradecendo o Almoço"],
+      ["12:50", "20", "Passeio", "CORREDOR DE BEIJOS (Equipes Garçons / Cafezinho)"],
+      ["13:10", "15", "Plenário", "VAQUINHA — Ávila & Fernanda"],
+      ["13:25", "20", "Plenário", "SOCIODRAMA II: CONVITE PARA O ECC — Josimar & Lígia"],
+      ["13:45", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
+      ["13:50", "15", "Salas", "CÍRCULOS: O BOM SEMEADOR"],
+      ["14:05", "05", "Passeio", "Deslocamento para a APRESENTAÇÃO DAS EQUIPES"],
+      ["14:10", "30", "Pátio", "APRESENTAÇÃO DAS EQUIPES"],
+      ["14:40", "05", "Passeio", "Deslocamento para o Plenário"],
+      ["14:45", "15", "Plenário", "ENTREGA DAS SACOLAS (Equipe da Externa)"],
+      ["15:00", "20", "Passeio", "CORTEJO NUPCIAL"],
+      ["15:20", "50", "Pátio", "CERIMÔNIA DE ENCERRAMENTO — Pr. Gerson & Graça"],
+      ["16:10", "10", "Passeio", "Saída (Casal Apresentador / Equipes / Confraternização)"],
+    ],
+  },
+};
+
+const LOCAL_COLORS = {
+  "Plenário": "#6B4E9E",
+  "Pátio": "#C77D3A",
+  "Passeio": "#4A8A8C",
+  "Salas": "#B0537A",
+  "Refeitório": "#3D7A4A",
+  "Sala": "#5A6EA8",
+};
+
+const DAY_KEYS = ["sexta", "sabado", "domingo"];
+
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+function minToHHMM(min) {
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+}
+function formatClock(d) {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmtDur(sec) {
+  const neg = sec < 0;
+  const a = Math.abs(sec);
+  const m = Math.floor(a / 60);
+  const s = a % 60;
+  return `${neg ? "−" : ""}${pad(m)}:${pad(s)}`;
+}
+function fmtStopwatch(sec) {
+  // MM:SS até 1h; HH:MM:SS a partir daí
+  const a = Math.max(0, sec);
+  const h = Math.floor(a / 3600);
+  const m = Math.floor((a % 3600) / 60);
+  const s = a % 60;
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+function fmtMinLabel(totalSec) {
+  // Rótulo curto tipo "3 min 20 s"
+  const a = Math.abs(totalSec);
+  if (a === 0) return "0 min";
+  const m = Math.floor(a / 60);
+  const s = a % 60;
+  if (m === 0) return `${s}s`;
+  if (s === 0) return `${m} min`;
+  return `${m} min ${s}s`;
+}
+function detectTodayKey(now) {
+  const iso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return DAY_KEYS.find((k) => SCHEDULE[k].date === iso) || "sexta";
+}
+
+// Som de lembrete via Web Audio (sem arquivo externo).
+// Quanto menor o tempo restante, mais agudo e mais bipes.
+let __audioCtx = null;
+function beep(threshold) {
+  try {
+    if (!__audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      __audioCtx = new AC();
+    }
+    const ctx = __audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    // config por limiar: [nº de bipes, frequência]
+    const cfg = { 15: [1, 660], 10: [2, 770], 5: [3, 880], 0: [4, 990] }[threshold] || [1, 660];
+    const [count, freq] = cfg;
+    for (let n = 0; n < count; n++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + n * 0.28;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.24);
+    }
+    // vibração no celular, se suportado
+    if (navigator.vibrate) navigator.vibrate(count === 1 ? 120 : [100, 60, 100]);
+  } catch (e) { /* silencioso */ }
+}
+
+function App() {
+  const [now, setNow] = useState(new Date());
+  const [dayKey, setDayKey] = useState(() => detectTodayKey(new Date()));
+
+  // Estado por atividade. Chave: "dia-indice".
+  // { startedAt: Date|null, endedAt: Date|null }
+  // startedAt = quando foi realmente iniciada (marcada); se null, usa horário previsto.
+  // endedAt   = quando foi realmente encerrada (marcada). Enquanto null e passou do
+  //             previsto, o prejuízo segue contando.
+  // ── Sincronização compartilhada (Firebase) ──
+  // marks guarda objetos Date localmente; no Firebase gravamos timestamps.
+  const [marks, setMarksLocal] = useState({});
+  const role = getRole(); // "control" (você) ou "view" (visitantes)
+  const isController = role === "control";
+
+  // Lê o Firebase e converte timestamps -> Date
+  useEffect(() => {
+    if (!window.__eccDB) return; // Firebase não configurado: modo offline local
+    const ref = window.__eccRef;
+    const unsub = window.__eccOnValue(ref, (snap) => {
+      const raw = snap.val() || {};
+      const parsed = {};
+      Object.keys(raw).forEach((k) => {
+        const v = raw[k] || {};
+        parsed[k] = {
+          startedAt: v.startedAt ? new Date(v.startedAt) : null,
+          endedAt: v.endedAt ? new Date(v.endedAt) : null,
+        };
+      });
+      setMarksLocal(parsed);
+    });
+    return () => unsub && unsub();
+  }, []);
+
+  // Grava no Firebase (só o controlador) convertendo Date -> timestamp
+  function persist(nextMarks) {
+    setMarksLocal(nextMarks); // atualização otimista local
+    if (!window.__eccDB || !isController) return;
+    const serial = {};
+    Object.keys(nextMarks).forEach((k) => {
+      const v = nextMarks[k] || {};
+      serial[k] = {
+        startedAt: v.startedAt ? v.startedAt.getTime() : null,
+        endedAt: v.endedAt ? v.endedAt.getTime() : null,
+      };
+    });
+    window.__eccSet(window.__eccRef, serial);
+  }
+  // setMarks: no controlador persiste; em visitante, ignora (somente leitura)
+  const setMarks = (updater) => {
+    setMarksLocal((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (isController) {
+        // persiste fora do setState para evitar efeito colateral duplicado
+        queueMicrotask(() => persist(next));
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const todayKey = detectTodayKey(now);
+  const day = SCHEDULE[dayKey];
+  const isToday = dayKey === todayKey;
+
+  const nowMs = now.getTime();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // Data base do dia selecionado (para converter horário previsto em timestamp)
+  const dayDate = day.date; // "2026-07-04"
+  function plannedMs(hhmm) {
+    return new Date(`${dayDate}T${hhmm}:00`).getTime();
+  }
+
+  const items = useMemo(() => {
+    return day.items.map(([start, dur, local, title], i) => {
+      const s = toMinutes(start);
+      const durMin = Number(dur);
+      const e = s + durMin;
+      return {
+        i, start, durMin, local, title,
+        s, e,
+        startMs: plannedMs(start),
+        endMs: plannedMs(minToHHMM(e)),
+        endLabel: minToHHMM(e),
+      };
+    });
+  }, [dayKey]);
+
+  function markFor(i) {
+    return marks[`${dayKey}-${i}`] || { startedAt: null, endedAt: null };
+  }
+
+  // ── Cálculo de status + atraso/ganho por atividade ──
+  // O atraso de INÍCIO só conta para UMA atividade por vez: a próxima da
+  // sequência que ainda não foi iniciada nem encerrada. Além disso, só
+  // começa a valer quando o controle do dia já está em andamento — ou seja,
+  // quando a atividade anterior já foi encerrada (ou é a 1ª do dia). Assim o
+  // app não abre somando atrasos de atividades que ninguém marcou.
+  const marksList = items.map((it) => markFor(it.i));
+  const anyStarted = marksList.some((m) => m.startedAt || m.endedAt);
+  // Índice da próxima atividade "da vez": primeira não iniciada e não encerrada
+  // cujo antecessor já foi encerrado (ou que é a primeira do dia).
+  let nextPendingIdx = -1;
+  for (let k = 0; k < items.length; k++) {
+    const mk = marksList[k];
+    if (mk.startedAt || mk.endedAt) continue; // já mexeram nessa
+    const prevDone = k === 0 || !!marksList[k - 1].endedAt;
+    if (prevDone) { nextPendingIdx = k; break; }
+  }
+
+  const rows = items.map((it) => {
+    const m = markFor(it.i);
+    const started = !!m.startedAt;
+    const ended = !!m.endedAt;
+
+    let status; // "aguardando" | "andamento" | "encerrada"
+    if (ended) status = "encerrada";
+    else if (started) status = "andamento";
+    else status = "aguardando"; // só inicia quando o usuário marca
+
+    // ── Atraso e ganho, medidos contra a DURAÇÃO planejada ──
+    // Três componentes independentes, sem contar em dobro:
+    //  a) ATRASO DE INÍCIO: tempo parado entre o início previsto e o início real
+    //     (ou agora, se ainda não começou). Não é recuperável.
+    //  b) ATRASO DE TÉRMINO: a atividade durou MAIS que o previsto.
+    //  c) TEMPO GANHO: encerrada antes do fim previsto (duração poupada).
+    // Tudo é medido contra o HORÁRIO PREVISTO do roteiro, não contra o
+    // momento em que o usuário tocou Iniciar.
+    const plannedDurSec = it.durMin * 60;
+
+    let overrunSec = 0;   // atraso: passou do fim previsto
+    let gainSec = 0;      // ganho: encerrada antes do fim previsto
+    let lateStartSec = 0; // atraso de início (só enquanto aguardando)
+    let reason = null;    // "inicio" | "termino"
+
+    // (a) Atraso de INÍCIO — relevante apenas enquanto a atividade AGUARDA.
+    // Depois de iniciada, o atraso passa a ser medido pelo decorrido contra o
+    // horário previsto (bloco abaixo), que já embute qualquer início tardio —
+    // por isso não somamos início + término para atividades já começadas.
+    if (!started) {
+      const isNext = it.i === nextPendingIdx;
+      if (isToday && anyStarted && isNext && nowMs > it.startMs) {
+        lateStartSec = Math.round((nowMs - it.startMs) / 1000);
+      }
+    }
+
+    // (b)/(c) Duração real vs planejada — só quando já iniciou
+    // O "decorrido" é medido a partir do HORÁRIO PREVISTO de início no roteiro
+    // (it.startMs) até agora (ou até o encerramento), não do toque em Iniciar.
+    let elapsedSec = 0;         // decorrido desde o horário previsto de início
+    let potentialGainSec = 0;   // ganho se encerrar exatamente agora
+    let realElapsedSec = 0;     // decorrido desde o CLIQUE em Iniciar (duração real)
+    let overFromStartSec = 0;   // quanto passou da duração prevista, contado desde o início
+    if (started) {
+      const endRefMs = ended ? m.endedAt.getTime() : nowMs;
+      elapsedSec = Math.max(0, Math.round((endRefMs - it.startMs) / 1000));
+      realElapsedSec = Math.max(0, Math.round((endRefMs - m.startedAt.getTime()) / 1000));
+      overFromStartSec = Math.max(0, realElapsedSec - plannedDurSec);
+      const deltaSec = elapsedSec - plannedDurSec; // + passou do previsto, − ainda dentro
+      if (deltaSec > 0) {
+        overrunSec = deltaSec;
+        reason = "termino";
+      } else if (deltaSec < 0 && ended) {
+        // ganho só é definitivo quando a atividade é encerrada
+        gainSec = -deltaSec;
+      }
+      // ganho potencial (só faz sentido em andamento e dentro do previsto)
+      if (!ended && deltaSec < 0) potentialGainSec = -deltaSec;
+    }
+
+    // Atraso total da atividade = atraso de início + atraso de término
+    const totalLateSec = lateStartSec + overrunSec;
+    // Motivo dominante para rótulos ao vivo
+    if (!reason && lateStartSec > 0) reason = "inicio";
+
+    // ── Desvio relativo ao cronograma ──
+    // Compara a posição real da atividade com o previsto no roteiro.
+    // Positivo = atrasada; negativo = adiantada; null = ainda sem sinal.
+    // Referência: o FIM previsto (it.endMs) — quando a atividade deveria estar concluída.
+    let scheduleDeviationSec = null;
+    if (ended) {
+      // encerrada: real vs fim previsto
+      scheduleDeviationSec = Math.round((m.endedAt.getTime() - it.endMs) / 1000);
+    } else if (started) {
+      // em andamento: se já passou do fim previsto, está atrasando em tempo real;
+      // senão, mostra a folga (adiantamento projetado se encerrar agora).
+      scheduleDeviationSec = Math.round((nowMs - it.endMs) / 1000);
+    } else if (isToday && nowMs > it.startMs) {
+      // aguardando e já deveria ter começado: atrasada pelo tempo parado
+      scheduleDeviationSec = Math.round((nowMs - it.startMs) / 1000);
+    }
+
+    // ── Desvio de INÍCIO: início real vs início previsto no cronograma ──
+    // Só existe quando a atividade já foi iniciada. Positivo = começou atrasada;
+    // negativo = começou adiantada.
+    let startDeviationSec = null;
+    if (m.startedAt) {
+      startDeviationSec = Math.round((m.startedAt.getTime() - it.startMs) / 1000);
+    }
+
+    return {
+      ...it, status, started, ended, endedAt: m.endedAt,
+      overrunSec, gainSec, lateStartSec, totalLateSec, reason,
+      elapsedSec, potentialGainSec, realElapsedSec, scheduleDeviationSec,
+      startDeviationSec, overFromStartSec,
+    };
+  });
+
+  // Atraso acumulado do dia (início + término, de todas as atividades)
+  const totalLateSec = rows.reduce((a, r) => a + r.totalLateSec, 0);
+  // Tempo ganho acumulado (atividades que duraram menos que o previsto)
+  const totalGainSec = rows.reduce((a, r) => a + r.gainSec, 0);
+  // Atraso total de INÍCIO: soma dos minutos que cada atividade iniciada
+  // começou depois do horário previsto (só as que começaram atrasadas).
+  const totalStartLateSec = rows.reduce(
+    (a, r) => a + (r.startDeviationSec && r.startDeviationSec > 0 ? r.startDeviationSec : 0),
+    0
+  );
+  // Saldo líquido: ganho − atraso. Positivo = adiantado; negativo = atrasado.
+  const netSec = totalGainSec - totalLateSec;
+  // Atrasos "ativos" = contando agora (não encerradas com atraso em curso)
+  const liveOverrunRows = rows.filter((r) => !r.ended && r.totalLateSec > 0);
+
+  // Atividade em andamento (iniciada e não encerrada)
+  const runningRow = rows.find((r) => r.status === "andamento") || null;
+  // Atividade aguardando cujo início já passou (atrasada para começar)
+  const lateToStartRow = rows.find((r) => r.status === "aguardando" && r.lateStartSec > 0) || null;
+  // O que mostrar no card: prioriza a em andamento; senão, a atrasada para iniciar
+  const currentRow = runningRow || lateToStartRow;
+
+  // Contadores gerais
+  const total = rows.length;
+  const encerradas = rows.filter((r) => r.ended).length;
+
+  // ── LEMBRETES: faltando 15, 10 e 5 min para o fim previsto ──
+  // Para a atividade em andamento, calcula o tempo restante e dispara um
+  // lembrete ao cruzar cada limiar. Persiste até você dispensar ou encerrar.
+  const [activeReminder, setActiveReminder] = useState(null); // { key, threshold, title }
+  const firedRef = useRef({}); // limiares já disparados por atividade
+  const runningRemainingSec = runningRow
+    ? Math.round((runningRow.endMs - nowMs) / 1000)
+    : null;
+
+  useEffect(() => {
+    if (!runningRow || runningRemainingSec === null) return;
+    const key = `${dayKey}-${runningRow.i}`;
+    const remMin = runningRemainingSec / 60;
+    const thresholds = [15, 10, 5];
+    for (const th of thresholds) {
+      if (remMin <= th && remMin > th - 1) {
+        const fkey = `${key}-${th}`;
+        if (!firedRef.current[fkey]) {
+          firedRef.current[fkey] = true;
+          setActiveReminder({ key, threshold: th, title: runningRow.title });
+          beep(th);
+        }
+      }
+    }
+    if (remMin <= 0 && remMin > -1) {
+      const fkey = `${key}-0`;
+      if (!firedRef.current[fkey]) {
+        firedRef.current[fkey] = true;
+        setActiveReminder({ key, threshold: 0, title: runningRow.title });
+        beep(0);
+      }
+    }
+  }, [runningRemainingSec, runningRow ? runningRow.i : -1, dayKey]);
+
+  useEffect(() => {
+    setActiveReminder(null);
+  }, [runningRow ? runningRow.i : -1, dayKey]);
+
+  function toggleStart(i) {
+    // ao (re)iniciar, limpa lembretes já disparados dessa atividade
+    const kp = `${dayKey}-${i}`;
+    [15, 10, 5, 0].forEach((t) => { delete firedRef.current[`${kp}-${t}`]; });
+    setMarks((prev) => {
+      const key = `${dayKey}-${i}`;
+      const cur = prev[key] || { startedAt: null, endedAt: null };
+      // Se já iniciada, desfaz início (e encerramento)
+      if (cur.startedAt) return { ...prev, [key]: { startedAt: null, endedAt: null } };
+      return { ...prev, [key]: { startedAt: new Date(), endedAt: null } };
+    });
+  }
+  function toggleEnd(i) {
+    setMarks((prev) => {
+      const key = `${dayKey}-${i}`;
+      const cur = prev[key] || { startedAt: null, endedAt: null };
+      if (cur.endedAt) {
+        // desfaz encerramento
+        return { ...prev, [key]: { ...cur, endedAt: null } };
+      }
+      // encerra agora; garante que tenha um início
+      return {
+        ...prev,
+        [key]: { startedAt: cur.startedAt || new Date(), endedAt: new Date() },
+      };
+    });
+  }
+
+  // ── Exportar Excel com o histórico completo dos 3 dias ──
+  function exportExcel() {
+    if (!window.XLSX) { alert("Biblioteca de Excel ainda carregando. Tente de novo em instantes."); return; }
+    const fmtTime = (d) => d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
+    const signMin = (sec) => {
+      if (sec === null || sec === undefined) return "";
+      const s = Math.round(sec / 60);
+      return (s > 0 ? "+" : "") + s;
+    };
+    const wb = window.XLSX.utils.book_new();
+
+    DAY_KEYS.forEach((dk) => {
+      const d = SCHEDULE[dk];
+      const rowsOut = d.items.map(([start, dur, local, title], i) => {
+        const s = toMinutes(start);
+        const durMin = Number(dur);
+        const e = s + durMin;
+        const startMs = new Date(`${d.date}T${start}:00`).getTime();
+        const endMs = new Date(`${d.date}T${minToHHMM(e)}:00`).getTime();
+        const mk = marks[`${dk}-${i}`] || { startedAt: null, endedAt: null };
+        const sa = mk.startedAt, ea = mk.endedAt;
+
+        const startDev = sa ? Math.round((sa.getTime() - startMs) / 60000) : null;
+        let realDurMin = "";
+        if (sa && ea) realDurMin = Math.round((ea.getTime() - sa.getTime()) / 60000);
+        const endDev = ea ? Math.round((ea.getTime() - endMs) / 60000) : null;
+        let status = ea ? "Encerrada" : sa ? "Em andamento" : "Não realizada";
+
+        return {
+          "Horário previsto": start,
+          "Duração prevista (min)": durMin,
+          "Local": local,
+          "Atividade": title,
+          "Início real": fmtTime(sa),
+          "Fim real": fmtTime(ea),
+          "Duração real (min)": realDurMin,
+          "Desvio início (min)": startDev === null ? "" : (startDev > 0 ? "+" : "") + startDev,
+          "Desvio fim (min)": endDev === null ? "" : (endDev > 0 ? "+" : "") + endDev,
+          "Status": status,
+        };
+      });
+      const ws = window.XLSX.utils.json_to_sheet(rowsOut);
+      ws["!cols"] = [
+        { wch: 14 }, { wch: 18 }, { wch: 11 }, { wch: 48 },
+        { wch: 11 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 15 },
+      ];
+      window.XLSX.utils.book_append_sheet(wb, ws, d.label.slice(0, 28));
+    });
+
+    window.XLSX.writeFile(wb, "Controle_ECC_XXXII.xlsx");
+  }
+
+  return (
+    <div style={S.page}>
+      <style>{css}</style>
+
+      {/* HEADER */}
+      <header style={S.header}>
+        <div style={S.headerInner}>
+          <div style={S.brandRow}>
+            <div style={S.cross} aria-hidden>✝</div>
+            <div>
+              <div style={S.kicker}>XXXII Encontro de Casais com Cristo</div>
+              <h1 style={S.title}>Controle do Roteiro</h1>
+              <span style={{ ...S.modeBanner, background: isController ? "#3D7A4A" : "#8A6FBF", color: "#fff" }}>
+                {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
+              </span>
+            </div>
+          </div>
+          <div style={S.clock}>
+            <div style={S.clockTime}>{formatClock(now)}</div>
+            <div style={S.clockDate}>
+              {now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* DAY TABS */}
+      <div style={S.tabs}>
+        {DAY_KEYS.map((k) => {
+          const active = k === dayKey;
+          const isThatToday = k === todayKey;
+          return (
+            <button key={k} onClick={() => setDayKey(k)} style={{ ...S.tab, ...(active ? S.tabActive : {}) }}>
+              {SCHEDULE[k].label}
+              {isThatToday && <span style={S.todayDot} title="Hoje" />}
+              <span style={S.tabDate}>{SCHEDULE[k].dateLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* SALDO DO DIA */}
+      <div style={S.prejWrap}>
+        <div style={{ ...S.prejCard, borderColor: netSec < 0 ? "#E3B7B2" : netSec > 0 ? "#B9D4C0" : "#CFE0D2" }}>
+          <div style={S.prejLeft}>
+            <div style={S.prejTop}>Saldo do dia</div>
+            <div style={{ ...S.prejValue, color: netSec < 0 ? "#C0392B" : netSec > 0 ? "#2E8B57" : "#3D7A4A" }}>
+              {netSec > 0 ? "+" : netSec < 0 ? "−" : ""}{fmtMinLabel(netSec)}
+            </div>
+            <div style={S.prejBreak}>
+              <span style={S.prejGain}>▲ ganho {fmtMinLabel(totalGainSec)}</span>
+              <span style={S.prejLoss}>▼ atraso {fmtMinLabel(totalLateSec)}</span>
+            </div>
+            <div style={S.prejStartLate}>
+              ⏱ Atraso total de início: <b>{fmtMinLabel(totalStartLateSec)}</b>
+            </div>
+            <div style={S.prejSub}>
+              {encerradas} de {total} atividades encerradas
+              {liveOverrunRows.length > 0 && (
+                <span style={S.prejLiveTag}>
+                  {" · "}{liveOverrunRows.length} estourando agora
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={S.prejBadge}>
+            <div style={{
+              ...S.prejBadgeInner,
+              background: liveOverrunRows.length > 0 ? "#C0392B" : netSec < 0 ? "#C77D3A" : netSec > 0 ? "#2E8B57" : "#3D7A4A",
+            }} className={liveOverrunRows.length > 0 ? "pulse" : ""}>
+              {liveOverrunRows.length > 0
+                ? "⏱ ATRASO ATIVO"
+                : netSec > 0
+                ? "ADIANTADO"
+                : netSec < 0
+                ? "ATRASADO"
+                : "EM DIA"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* LEMBRETE ATIVO */}
+      {isController && activeReminder && runningRow && (
+        <div style={S.remWrap}>
+          <div style={{
+            ...S.remCard,
+            background: activeReminder.threshold === 0 ? "#7A2E2E"
+              : activeReminder.threshold <= 5 ? "#C0392B"
+              : activeReminder.threshold <= 10 ? "#C77D3A" : "#8A6D2B",
+          }} className="pulse">
+            <div style={S.remBell}>🔔</div>
+            <div style={S.remBody}>
+              <div style={S.remTitle}>
+                {activeReminder.threshold === 0
+                  ? "TEMPO ESGOTADO — encerre agora!"
+                  : `Faltam ${activeReminder.threshold} min para encerrar`}
+              </div>
+              <div style={S.remSub}>{activeReminder.title}</div>
+              {runningRemainingSec !== null && (
+                <div style={S.remClock}>
+                  {runningRemainingSec >= 0 ? "restam " : "estourou "}
+                  {fmtStopwatch(Math.abs(runningRemainingSec))}
+                </div>
+              )}
+            </div>
+            <div style={S.remBtns}>
+              <button style={S.remBtnEnd} onClick={() => { toggleEnd(runningRow.i); setActiveReminder(null); }}>
+                ✓ Encerrar
+              </button>
+              <button style={S.remBtnDismiss} onClick={() => setActiveReminder(null)}>
+                Dispensar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ATIVIDADE ATUAL */}
+      {isToday && currentRow ? (
+        <div style={S.nowWrap}>
+          <div style={{ ...S.nowCard, borderColor: currentRow.totalLateSec > 0 ? "#E3B7B2" : "#E0D5EE" }}>
+            <div style={S.nowLabelRow}>
+              {currentRow.status === "andamento" ? (
+                <span style={S.liveBadge}>
+                  <span style={S.livePulse} />EM ANDAMENTO
+                </span>
+              ) : (
+                <span style={S.waitBadge}>
+                  <span style={S.waitDot} />AGUARDANDO INÍCIO
+                </span>
+              )}
+              <span style={{ ...S.localChip, background: LOCAL_COLORS[currentRow.local] }}>
+                {currentRow.local}
+              </span>
+            </div>
+            <div style={S.nowTitle}>{currentRow.title}</div>
+            <div style={S.nowTimes}>
+              Previsto {currentRow.start} → {currentRow.endLabel} · {currentRow.durMin} min
+            </div>
+
+            {currentRow.status === "andamento" && (
+              <div style={{ ...S.runTimerBox, background: currentRow.overFromStartSec > 0 ? "#7A2E2E" : "#4A3B6B" }}>
+                <div style={S.runTimerLabel}>EM ANDAMENTO DESDE QUE VOCÊ INICIOU</div>
+                <div style={S.runTimerValue}>{fmtStopwatch(currentRow.realElapsedSec)}</div>
+                {currentRow.overFromStartSec > 0 && (
+                  <div style={S.runTimerOver} className="blink">
+                    ▼ passou {fmtMinLabel(currentRow.overFromStartSec)} da duração prevista
+                  </div>
+                )}
+              </div>
+            )}
+
+            {currentRow.status === "andamento" && runningRemainingSec !== null && (
+              (() => {
+                const rem = runningRemainingSec;
+                const inZone = rem <= 15 * 60 && rem > 0;
+                const zoneColor = rem <= 5 * 60 ? "#C0392B" : rem <= 10 * 60 ? "#C77D3A" : "#8A6D2B";
+                return (
+                  <div style={{
+                    ...S.countdownBox,
+                    borderColor: rem <= 0 ? "#C0392B" : inZone ? zoneColor : "#E0D5EE",
+                    background: rem <= 0 ? "#FBEAE7" : inZone ? "#FCF3E8" : "#F7F3FB",
+                  }}>
+                    <span style={S.countdownLabel}>
+                      {rem > 0 ? "para o fim previsto" : "passou do fim previsto"}
+                    </span>
+                    <span style={{
+                      ...S.countdownValue,
+                      color: rem <= 0 ? "#C0392B" : inZone ? zoneColor : "#4A3B6B",
+                    }} className={rem <= 5 * 60 ? "blink" : ""}>
+                      {rem > 0 ? fmtStopwatch(rem) : "+" + fmtStopwatch(-rem)}
+                    </span>
+                  </div>
+                );
+              })()
+            )}
+
+            {currentRow.status === "aguardando" ? (
+              // Atrasada para começar: conta o tempo parado
+              <div style={S.overrunBox}>
+                <div style={S.overrunLabel}>DEVERIA TER COMEÇADO — atrasado</div>
+                <div style={S.overrunTime} className="blink">+{fmtDur(currentRow.lateStartSec)}</div>
+                <div style={S.overrunHint}>Conta até você iniciar a atividade.</div>
+              </div>
+            ) : currentRow.overrunSec > 0 ? (
+              // Em andamento e já passou da duração prevista
+              <div style={S.overrunBox}>
+                <div style={S.overrunLabel}>PASSOU DA DURAÇÃO — contando</div>
+                <div style={S.overrunTime} className="blink">+{fmtDur(currentRow.overrunSec)}</div>
+                <div style={S.overrunHint}>
+                  Decorrido {fmtMinLabel(currentRow.elapsedSec)} de {currentRow.durMin} min ·
+                  conta até você encerrar.
+                </div>
+              </div>
+            ) : (
+              // Em andamento e dentro da duração: mostra decorrido e ganho potencial
+              <div style={S.inTimeBox}>
+                <span style={S.inTimeDot} />
+                Decorrido {fmtMinLabel(currentRow.elapsedSec)} de {currentRow.durMin} min ·
+                encerrar agora rende {fmtMinLabel(currentRow.potentialGainSec)}
+              </div>
+            )}
+
+            <div style={S.nowBtns}>
+              {isController ? (
+                currentRow.status === "andamento" ? (
+                  <button style={S.btnEnd} onClick={() => toggleEnd(currentRow.i)}>
+                    ✓ Encerrar atividade
+                  </button>
+                ) : (
+                  <button style={S.btnStart} onClick={() => toggleStart(currentRow.i)}>
+                    ▶ Iniciar atividade
+                  </button>
+                )
+              ) : (
+                <div style={S.viewOnlyNote}>👁 Acompanhando ao vivo (somente leitura)</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={S.nowWrap}>
+          <div style={S.nowCardIdle}>
+            <div style={S.idleTitle}>
+              {isToday ? "Nenhuma atividade em andamento" : `Visualizando ${day.label}`}
+            </div>
+            <div style={S.idleSub}>
+              {isToday
+                ? "Toque em Iniciar na próxima atividade quando ela começar."
+                : `O acompanhamento ao vivo funciona em ${SCHEDULE[todayKey].label}.`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TIMELINE */}
+      <main style={S.list}>
+        {rows.map((r) => {
+          const c = LOCAL_COLORS[r.local] || "#999";
+          const lateWaiting = r.status === "aguardando" && r.lateStartSec > 0;
+          const stColor =
+            r.status === "encerrada" ? "#3D7A4A"
+            : r.status === "andamento" ? "#6B4E9E"
+            : lateWaiting ? "#C0392B" : "#A89C88";
+          return (
+            <div
+              key={r.i}
+              style={{
+                ...S.row,
+                ...(r.status === "andamento" ? S.rowCurrent : {}),
+                ...(r.status === "encerrada" ? S.rowDone : {}),
+                ...(r.totalLateSec > 0 && !r.ended ? S.rowOverrun : {}),
+              }}
+            >
+              <div style={S.rowTime}>
+                <div style={S.rowStart}>{r.start}</div>
+                <div style={S.rowDur}>{r.durMin}′</div>
+              </div>
+              <div style={{ ...S.rowBar, background: c }} />
+              <div style={S.rowBody}>
+                <div style={S.rowTitle}>{r.title}</div>
+                <div style={S.rowMeta}>
+                  <span style={{ ...S.rowLocal, color: c }}>{r.local}</span>
+                  <span style={{ ...S.rowStatus, color: stColor }}>
+                    {r.status === "encerrada"
+                      ? "✓ encerrada"
+                      : r.status === "andamento"
+                      ? "● em andamento"
+                      : lateWaiting
+                      ? "⚠ deveria ter começado"
+                      : "○ aguardando"}
+                  </span>
+                  {r.lateStartSec > 0 && (
+                    <span style={{ ...S.rowOverrunTag, ...(!r.started ? S.rowOverrunTagLive : {}) }}
+                          className={!r.started ? "blink" : ""}>
+                      início +{fmtMinLabel(r.lateStartSec)}
+                    </span>
+                  )}
+                  {r.started && r.startDeviationSec !== null && Math.abs(r.startDeviationSec) >= 60 && (
+                    <span style={{
+                      ...S.rowDevTag,
+                      color: r.startDeviationSec > 0 ? "#C0392B" : "#2E8B57",
+                      background: r.startDeviationSec > 0 ? "#F7D9D4" : "#DCEFE2",
+                    }}>
+                      início {r.startDeviationSec > 0 ? "+" : "−"}{fmtMinLabel(r.startDeviationSec)}
+                    </span>
+                  )}
+                  {r.overrunSec > 0 && (
+                    <span style={{ ...S.rowOverrunTag, ...(!r.ended ? S.rowOverrunTagLive : {}) }}
+                          className={!r.ended ? "blink" : ""}>
+                      atraso +{fmtMinLabel(r.overrunSec)}
+                    </span>
+                  )}
+                  {r.gainSec > 0 && (
+                    <span style={S.rowGainTag}>ganho −{fmtMinLabel(r.gainSec)}</span>
+                  )}
+                  {r.scheduleDeviationSec !== null && (
+                    <span style={{
+                      ...S.rowDevTag,
+                      color: r.scheduleDeviationSec > 0 ? "#C0392B" : r.scheduleDeviationSec < 0 ? "#2E8B57" : "#7A6F5E",
+                      background: r.scheduleDeviationSec > 0 ? "#F7D9D4" : r.scheduleDeviationSec < 0 ? "#DCEFE2" : "#ECE6DA",
+                    }}>
+                      {r.scheduleDeviationSec > 0
+                        ? `▼ ${fmtMinLabel(r.scheduleDeviationSec)} atrasada`
+                        : r.scheduleDeviationSec < 0
+                        ? `▲ ${fmtMinLabel(r.scheduleDeviationSec)} adiantada`
+                        : "no horário"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div style={S.rowActions}>
+                {!isController ? null : r.status !== "encerrada" ? (
+                  <button
+                    style={{ ...S.rowBtn, ...(r.status === "andamento" ? S.rowBtnEnd : S.rowBtnStart) }}
+                    onClick={() => (r.status === "andamento" ? toggleEnd(r.i) : toggleStart(r.i))}
+                  >
+                    {r.status === "andamento" ? "Encerrar" : "Iniciar"}
+                  </button>
+                ) : (
+                  <button style={{ ...S.rowBtn, ...S.rowBtnUndo }} onClick={() => toggleEnd(r.i)}>
+                    Reabrir
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </main>
+
+      <div style={S.exportWrap}>
+        <button style={S.exportBtn} onClick={exportExcel}>
+          ⬇ Exportar planilha (.xlsx) dos 3 dias
+        </button>
+      </div>
+
+      <footer style={S.footer}>
+        Toque em <b>Iniciar</b> quando a atividade começar e <b>Encerrar</b> quando terminar.
+        Encerrar antes do previsto gera <b>tempo ganho</b>; atrasos contam sozinhos.
+        · Roteiro: Mikênio &amp; Kristiane
+      </footer>
+    </div>
+  );
+}
+
+const css = `
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .blink { animation: blink 1s steps(2, start) infinite; }
+  .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes blink { to { opacity: 0.4; } }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  @media (prefers-reduced-motion: reduce) {
+    .blink, .pulse { animation: none; }
+  }
+`;
+
+const S = {
+  page: {
+    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+    background: "#F3EFE7", minHeight: "100vh", color: "#2B2620",
+    maxWidth: 640, margin: "0 auto", paddingBottom: 40,
+  },
+  header: { background: "linear-gradient(135deg, #4A3B6B 0%, #6B4E9E 100%)", color: "#fff", padding: "18px 20px 20px" },
+  headerInner: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  brandRow: { display: "flex", gap: 12, alignItems: "center" },
+  cross: { fontSize: 30, opacity: 0.9 },
+  kicker: { fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", opacity: 0.85 },
+  title: { fontSize: 22, margin: "2px 0 0", fontWeight: 700 },
+  clock: { textAlign: "right" },
+  clockTime: { fontSize: 26, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: 1 },
+  clockDate: { fontSize: 11, opacity: 0.85, textTransform: "capitalize" },
+
+  tabs: { display: "flex", gap: 6, padding: "12px 12px 0" },
+  tab: {
+    flex: 1, border: "none", background: "#E4DCCE", color: "#6A5F4E", padding: "10px 4px",
+    borderRadius: "10px 10px 0 0", cursor: "pointer", fontSize: 14, fontWeight: 600,
+    display: "flex", flexDirection: "column", alignItems: "center", gap: 2, position: "relative",
+  },
+  tabActive: { background: "#fff", color: "#4A3B6B", boxShadow: "0 -2px 6px rgba(0,0,0,0.04)" },
+  tabDate: { fontSize: 10, fontWeight: 500, opacity: 0.7 },
+  todayDot: { position: "absolute", top: 7, right: 10, width: 7, height: 7, borderRadius: "50%", background: "#E0544F" },
+
+  prejWrap: { padding: "14px 12px 0", background: "#fff" },
+  prejCard: {
+    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
+    background: "#FBF9F4", border: "2px solid #CFE0D2", borderRadius: 14, padding: "14px 16px",
+  },
+  prejLeft: { minWidth: 0 },
+  prejTop: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#A89C88" },
+  prejValue: { fontSize: 30, fontWeight: 800, lineHeight: 1.05, fontVariantNumeric: "tabular-nums", marginTop: 2 },
+  prejBreak: { display: "flex", gap: 12, marginTop: 4, fontSize: 12, fontWeight: 700 },
+  prejStartLate: { fontSize: 12, color: "#8A5A2B", marginTop: 4 },
+  prejGain: { color: "#2E8B57" },
+  prejLoss: { color: "#C0392B" },
+  prejSub: { fontSize: 12, color: "#7A6F5E", marginTop: 2 },
+  prejLiveTag: { color: "#C0392B", fontWeight: 700 },
+  prejBadge: { flexShrink: 0 },
+  prejBadgeInner: { color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 0.5, padding: "8px 12px", borderRadius: 10, whiteSpace: "nowrap" },
+
+  nowWrap: { padding: "0 12px", background: "#fff" },
+  remWrap: { padding: "14px 12px 0", background: "#fff" },
+  remCard: {
+    display: "flex", alignItems: "center", gap: 12, color: "#fff",
+    borderRadius: 16, padding: "14px 16px", boxShadow: "0 6px 20px rgba(192,57,43,0.3)",
+  },
+  remBell: { fontSize: 30, flexShrink: 0 },
+  remBody: { flex: 1, minWidth: 0 },
+  remTitle: { fontSize: 15, fontWeight: 800, lineHeight: 1.2 },
+  remSub: { fontSize: 12, opacity: 0.9, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  remClock: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", marginTop: 3, opacity: 0.95 },
+  remBtns: { display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 },
+  remBtnEnd: { border: "none", background: "#fff", color: "#C0392B", fontWeight: 800, fontSize: 13, padding: "9px 12px", borderRadius: 9, cursor: "pointer", whiteSpace: "nowrap" },
+  remBtnDismiss: { border: "1px solid rgba(255,255,255,0.6)", background: "transparent", color: "#fff", fontWeight: 600, fontSize: 12, padding: "7px 12px", borderRadius: 9, cursor: "pointer" },
+  nowCard: {
+    background: "linear-gradient(160deg, #FBF9F4 0%, #F1EAF7 100%)", border: "1px solid #E0D5EE",
+    borderRadius: 16, padding: 18, margin: "14px 0", boxShadow: "0 4px 16px rgba(74,59,107,0.08)",
+  },
+  nowCardIdle: { background: "#FBF9F4", border: "1px dashed #D5CBB8", borderRadius: 16, padding: 24, margin: "14px 0", textAlign: "center" },
+  idleTitle: { fontSize: 17, fontWeight: 700, color: "#4A3B6B" },
+  idleSub: { fontSize: 13, color: "#8A7F6E", marginTop: 4 },
+
+  nowLabelRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  liveBadge: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#6B4E9E" },
+  livePulse: { width: 8, height: 8, borderRadius: "50%", background: "#6B4E9E" },
+  waitBadge: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#C0392B" },
+  waitDot: { width: 8, height: 8, borderRadius: "50%", background: "#C0392B" },
+  localChip: { color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 },
+  nowTitle: { fontSize: 19, fontWeight: 700, lineHeight: 1.25, color: "#2B2620" },
+  nowTimes: { fontSize: 13, color: "#7A6F5E", marginTop: 4 },
+  runTimerBox: {
+    display: "flex", flexDirection: "column", alignItems: "center",
+    background: "#4A3B6B", color: "#fff", borderRadius: 12,
+    padding: "12px", margin: "14px 0 0",
+  },
+  runTimerLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: 0.8 },
+  runTimerValue: { fontSize: 40, fontWeight: 800, fontVariantNumeric: "tabular-nums", lineHeight: 1.1, marginTop: 2 },
+  runTimerOver: { fontSize: 12, fontWeight: 700, color: "#FFD9D4", marginTop: 4 },
+  countdownBox: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    border: "1px solid #E0D5EE", borderRadius: 12, padding: "10px 14px", marginTop: 10,
+  },
+  countdownLabel: { fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "#8A7F6E" },
+  countdownValue: { fontSize: 24, fontWeight: 800, fontVariantNumeric: "tabular-nums" },
+
+  overrunBox: { background: "#FBEAE7", border: "1px solid #E3B7B2", borderRadius: 12, padding: "12px 14px", margin: "14px 0 4px", textAlign: "center" },
+  overrunLabel: { fontSize: 10, fontWeight: 800, letterSpacing: 1, color: "#C0392B" },
+  overrunTime: { fontSize: 36, fontWeight: 800, color: "#C0392B", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 },
+  overrunHint: { fontSize: 11, color: "#B08480", marginTop: 2 },
+  inTimeBox: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#EAF3EC", border: "1px solid #CFE0D2", color: "#3D7A4A", borderRadius: 12, padding: "12px", margin: "14px 0 4px", fontSize: 13, fontWeight: 600 },
+  inTimeDot: { width: 8, height: 8, borderRadius: "50%", background: "#3D7A4A" },
+
+  nowBtns: { marginTop: 14 },
+  btnEnd: { width: "100%", border: "none", background: "#3D7A4A", color: "#fff", fontSize: 16, fontWeight: 700, padding: "14px", borderRadius: 12, cursor: "pointer" },
+  btnStart: { width: "100%", border: "none", background: "#6B4E9E", color: "#fff", fontSize: 16, fontWeight: 700, padding: "14px", borderRadius: 12, cursor: "pointer" },
+  viewOnlyNote: { textAlign: "center", fontSize: 13, fontWeight: 600, color: "#6B4E9E", background: "#F1EAF7", padding: "12px", borderRadius: 12 },
+  modeBanner: { fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, marginTop: 6, display: "inline-block" },
+
+  list: { padding: "8px 12px 0", background: "#fff" },
+  row: { display: "flex", alignItems: "stretch", gap: 10, padding: "10px 6px", borderRadius: 12, position: "relative", borderBottom: "1px solid #F0EADF" },
+  rowCurrent: { background: "#F1EAF7", boxShadow: "inset 3px 0 0 #6B4E9E" },
+  rowDone: { opacity: 0.55 },
+  rowOverrun: { background: "#FBEAE7", boxShadow: "inset 3px 0 0 #C0392B" },
+  rowTime: { width: 46, textAlign: "center", flexShrink: 0 },
+  rowStart: { fontSize: 15, fontWeight: 700, color: "#4A3B6B", fontVariantNumeric: "tabular-nums" },
+  rowDur: { fontSize: 10, color: "#A89C88" },
+  rowBar: { width: 4, borderRadius: 4, flexShrink: 0 },
+  rowBody: { flex: 1, minWidth: 0 },
+  rowTitle: { fontSize: 14, fontWeight: 500, lineHeight: 1.3, color: "#2B2620" },
+  rowMeta: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 3 },
+  rowLocal: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
+  rowStatus: { fontSize: 11, fontWeight: 600 },
+  rowOverrunTag: { fontSize: 11, fontWeight: 700, color: "#C0392B", background: "#F7D9D4", padding: "1px 7px", borderRadius: 10 },
+  rowOverrunTagLive: { background: "#C0392B", color: "#fff" },
+  rowGainTag: { fontSize: 11, fontWeight: 700, color: "#2E8B57", background: "#DCEFE2", padding: "1px 7px", borderRadius: 10 },
+  rowDevTag: { fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 10 },
+  rowActions: { display: "flex", alignItems: "center", flexShrink: 0 },
+  rowBtn: { border: "none", borderRadius: 9, fontSize: 12, fontWeight: 700, padding: "8px 12px", cursor: "pointer", whiteSpace: "nowrap" },
+  rowBtnStart: { background: "#EDE6DA", color: "#6B4E9E" },
+  rowBtnEnd: { background: "#3D7A4A", color: "#fff" },
+  rowBtnUndo: { background: "transparent", color: "#A89C88", textDecoration: "underline", fontWeight: 600 },
+
+  footer: { textAlign: "center", fontSize: 11, color: "#A89C88", padding: "16px 20px", background: "#fff", lineHeight: 1.5 },
+  exportWrap: { padding: "16px 16px 0", background: "#fff", textAlign: "center" },
+  exportBtn: {
+    border: "1px solid #3D7A4A", background: "#EAF3EC", color: "#3D7A4A",
+    fontSize: 14, fontWeight: 700, padding: "12px 18px", borderRadius: 12, cursor: "pointer",
+  },
+};
+
+
+// Monta o app quando o Firebase terminar de inicializar (ou falhar)
+function mount() {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<App />);
+}
+if (window.__eccReady) mount();
+else window.addEventListener("ecc-ready", mount, { once: true });
+</script>
+</body>
+</html>
