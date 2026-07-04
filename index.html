@@ -650,6 +650,27 @@ function App() {
     window.XLSX.writeFile(wb, "Controle_ECC_XXXII.xlsx");
   }
 
+  // ── Reset: zera todos os dados (local + Firebase) ──
+  function resetAll() {
+    if (!isController) return;
+    const ok = window.confirm(
+      "Tem certeza que deseja ZERAR todos os dados?\n\n" +
+      "Isso apaga início/encerramento de TODAS as atividades dos 3 dias, " +
+      "para você e para todos que estão acompanhando. Não dá para desfazer.\n\n" +
+      "Dica: exporte a planilha antes, se quiser guardar o registro."
+    );
+    if (!ok) return;
+    // limpa lembretes já disparados
+    firedRef.current = {};
+    setActiveReminder(null);
+    // zera local e Firebase
+    setMarksLocal({});
+    if (window.__eccDB && window.__eccSet && window.__eccRef) {
+      try { window.__eccSet(window.__eccRef, {}); }
+      catch (e) { console.error("Falha ao limpar o Firebase:", e); }
+    }
+  }
+
   return (
     <div style={S.page}>
       <style>{css}</style>
@@ -991,6 +1012,11 @@ function App() {
         <button style={S.exportBtn} onClick={exportExcel}>
           ⬇ Exportar planilha (.xlsx) dos 3 dias
         </button>
+        {isController && (
+          <button style={S.resetBtn} onClick={resetAll}>
+            ⟲ Zerar todos os dados
+          </button>
+        )}
       </div>
 
       <footer style={S.footer}>
@@ -1140,10 +1166,14 @@ const S = {
   rowBtnUndo: { background: "transparent", color: "#A89C88", textDecoration: "underline", fontWeight: 600 },
 
   footer: { textAlign: "center", fontSize: 11, color: "#A89C88", padding: "16px 20px", background: "#fff", lineHeight: 1.5 },
-  exportWrap: { padding: "16px 16px 0", background: "#fff", textAlign: "center" },
+  exportWrap: { padding: "16px 16px 0", background: "#fff", textAlign: "center", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" },
   exportBtn: {
     border: "1px solid #3D7A4A", background: "#EAF3EC", color: "#3D7A4A",
     fontSize: 14, fontWeight: 700, padding: "12px 18px", borderRadius: 12, cursor: "pointer",
+  },
+  resetBtn: {
+    border: "1px solid #E3B7B2", background: "#FBEAE7", color: "#C0392B",
+    fontSize: 13, fontWeight: 700, padding: "10px 16px", borderRadius: 12, cursor: "pointer",
   },
 };
 
