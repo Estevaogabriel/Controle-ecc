@@ -72,6 +72,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
+// BUILD v3 — compilação manual sem varredura automática do Babel
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1178,10 +1179,18 @@ else {
 (function () {
   function runApp() {
     try {
+      console.log("[ECC] Iniciando compilação — BUILD v3");
       var src = document.getElementById("ecc-app-source").textContent;
-      var out = Babel.transform(src, { presets: ["react"] }).code;
+      // Defesa: remove quaisquer linhas 'import ...' que tenham sido coladas
+      // por engano (ex: snippet do Firebase), que quebrariam o eval.
+      var cleaned = src.replace(/^\s*import\s.*$/gm, "// (linha import removida automaticamente)");
+      if (cleaned !== src) {
+        console.warn("[ECC] Linhas 'import' foram encontradas e removidas do código do app. Verifique se você não colou o snippet do Firebase por engano.");
+      }
+      var out = Babel.transform(cleaned, { presets: ["react"] }).code;
       // executa o código compilado no escopo global
       (0, eval)(out);
+      console.log("[ECC] App montado com sucesso.");
     } catch (e) {
       var root = document.getElementById("root");
       if (root) {
