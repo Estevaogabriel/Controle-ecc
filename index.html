@@ -71,7 +71,7 @@
   })();
 </script>
 
-<script type="text/babel" data-presets="react">
+<script type="text/plain" id="ecc-app-source">
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1170,6 +1170,43 @@ else {
   // rede de segurança: monta em no máximo 3s, independentemente do Firebase
   setTimeout(mount, 3000);
 }
+</script>
+
+<!-- Compila o código do app manualmente, evitando a varredura automática
+     do Babel (que conflitava com o <script type="module"> do Firebase). -->
+<script>
+(function () {
+  function runApp() {
+    try {
+      var src = document.getElementById("ecc-app-source").textContent;
+      var out = Babel.transform(src, { presets: ["react"] }).code;
+      // executa o código compilado no escopo global
+      (0, eval)(out);
+    } catch (e) {
+      var root = document.getElementById("root");
+      if (root) {
+        root.innerHTML =
+          '<div class="ecc-loading">Erro ao compilar o app. Abra o Console (F12) e me envie a mensagem.<br><br>' +
+          String(e && e.message ? e.message : e) + "</div>";
+      }
+      console.error("Falha ao compilar o app:", e);
+    }
+  }
+  // espera o Babel estar disponível
+  if (window.Babel) runApp();
+  else {
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (window.Babel) { clearInterval(iv); runApp(); }
+      else if (tries > 100) { // ~10s
+        clearInterval(iv);
+        var root = document.getElementById("root");
+        if (root) root.innerHTML = '<div class="ecc-loading">Não foi possível carregar o compilador (Babel). Verifique sua conexão e recarregue.</div>';
+      }
+    }, 100);
+  }
+})();
 </script>
 </body>
 </html>
