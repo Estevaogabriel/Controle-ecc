@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v6 — neutraliza statements de modulo no codigo compilado
+// BUILD v7 — runtime classico do JSX (React.createElement), sem imports
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1182,14 +1182,15 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v6 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v7 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
-      // Compila apenas o JSX. NÃO convertemos módulos para CommonJS, pois o
-      // navegador não tem require(). Em vez disso, removemos import/export
-      // do código compilado (o app não precisa deles — React/ReactDOM são
-      // globais carregados via <script>).
-      var out = Babel.transform(src, { presets: ["react"] }).code;
+      // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
+      // que NÃO gera import de "react/jsx-runtime". Assim não há import/require
+      // no código compilado e React (global) é usado diretamente.
+      var out = Babel.transform(src, {
+        presets: [["react", { runtime: "classic" }]],
+      }).code;
 
       // Remove statements de módulo do código compilado, cobrindo:
       //  - import ... from "x";
