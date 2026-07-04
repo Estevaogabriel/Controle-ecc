@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v4 — Babel carregado dinamicamente, sem varredura automática
+// BUILD v5 — remove import/export do código compilado antes do eval
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1182,11 +1182,32 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v4 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v5 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
-      // Defesa extra: remove qualquer linha 'import ...' colada por engano.
-      var cleaned = src.replace(/^\s*import\s.*$/gm, "// (import removido)");
-      var out = Babel.transform(cleaned, { presets: ["react"] }).code;
+
+      // Transforma JSX e converte QUALQUER import/export para CommonJS,
+      // eliminando o "import" da saída (a causa do erro no eval).
+      var opts = { presets: ["react"] };
+      try {
+        // se o plugin estiver disponível no standalone, usa-o
+        if (Babel.availablePlugins && Babel.availablePlugins["transform-modules-commonjs"]) {
+          opts.plugins = ["transform-modules-commonjs"];
+        }
+      } catch (ignore) {}
+
+      var out = Babel.transform(src, opts).code;
+
+      // Rede de segurança: se ainda sobrar import/export no código compilado,
+      // remove esses statements (cobre a forma de várias linhas). Específico
+      // para statements reais no início de linha, evitando falsos positivos.
+      if (/^\s*(import|export)\b/m.test(out)) {
+        console.warn("[ECC] Removendo import/export remanescentes do código compilado.");
+        out = out
+          .replace(/^\s*import\b[\s\S]*?;/gm, "/* import removido */")
+          .replace(/^\s*export\s+default\s+/gm, "")
+          .replace(/^\s*export\s+/gm, "");
+      }
+
       (0, eval)(out);
       console.log("[ECC] App montado com sucesso.");
     } catch (e) {
