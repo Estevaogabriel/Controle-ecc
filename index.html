@@ -16,10 +16,11 @@
 <!-- React via CDN -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<!-- Babel para compilar o JSX no navegador -->
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <!-- SheetJS para exportar Excel -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<!-- Babel NÃO é carregado por tag aqui: ele é carregado dinamicamente mais
+     abaixo, DEPOIS que a página montou, para evitar que sua varredura
+     automática toque no <script type="module"> do Firebase. -->
 
 <!-- Firebase (Realtime Database) via CDN -->
 <script type="module">
@@ -72,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v3 — compilação manual sem varredura automática do Babel
+// BUILD v4 — Babel carregado dinamicamente, sem varredura automática
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -1173,48 +1174,48 @@ else {
 }
 </script>
 
-<!-- Compila o código do app manualmente, evitando a varredura automática
-     do Babel (que conflitava com o <script type="module"> do Firebase). -->
+<!-- Carrega o Babel dinamicamente (após o load) e compila o app manualmente,
+     evitando a varredura automática que conflita com o módulo Firebase. -->
 <script>
 (function () {
-  function runApp() {
+  var BABEL_URL = "https://unpkg.com/@babel/standalone/babel.min.js";
+
+  function compileAndRun() {
     try {
-      console.log("[ECC] Iniciando compilação — BUILD v3");
+      console.log("[ECC] Compilando — BUILD v4 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
-      // Defesa: remove quaisquer linhas 'import ...' que tenham sido coladas
-      // por engano (ex: snippet do Firebase), que quebrariam o eval.
-      var cleaned = src.replace(/^\s*import\s.*$/gm, "// (linha import removida automaticamente)");
-      if (cleaned !== src) {
-        console.warn("[ECC] Linhas 'import' foram encontradas e removidas do código do app. Verifique se você não colou o snippet do Firebase por engano.");
-      }
+      // Defesa extra: remove qualquer linha 'import ...' colada por engano.
+      var cleaned = src.replace(/^\s*import\s.*$/gm, "// (import removido)");
       var out = Babel.transform(cleaned, { presets: ["react"] }).code;
-      // executa o código compilado no escopo global
       (0, eval)(out);
       console.log("[ECC] App montado com sucesso.");
     } catch (e) {
       var root = document.getElementById("root");
       if (root) {
         root.innerHTML =
-          '<div class="ecc-loading">Erro ao compilar o app. Abra o Console (F12) e me envie a mensagem.<br><br>' +
+          '<div class="ecc-loading">Erro ao iniciar o app. Envie esta mensagem:<br><br>' +
           String(e && e.message ? e.message : e) + "</div>";
       }
-      console.error("Falha ao compilar o app:", e);
+      console.error("[ECC] Falha:", e);
     }
   }
-  // espera o Babel estar disponível
-  if (window.Babel) runApp();
-  else {
-    var tries = 0;
-    var iv = setInterval(function () {
-      tries++;
-      if (window.Babel) { clearInterval(iv); runApp(); }
-      else if (tries > 100) { // ~10s
-        clearInterval(iv);
-        var root = document.getElementById("root");
-        if (root) root.innerHTML = '<div class="ecc-loading">Não foi possível carregar o compilador (Babel). Verifique sua conexão e recarregue.</div>';
-      }
-    }, 100);
+
+  function loadBabelThenRun() {
+    if (window.Babel) { compileAndRun(); return; }
+    var s = document.createElement("script");
+    s.src = BABEL_URL;
+    s.onload = compileAndRun;
+    s.onerror = function () {
+      var root = document.getElementById("root");
+      if (root) root.innerHTML = '<div class="ecc-loading">Não foi possível carregar o compilador. Verifique a conexão e recarregue.</div>';
+    };
+    document.body.appendChild(s);
   }
+
+  // Só carrega o Babel DEPOIS que a página terminou de carregar, para que a
+  // auto-varredura do Babel (em DOMContentLoaded) não chegue a rodar.
+  if (document.readyState === "complete") loadBabelThenRun();
+  else window.addEventListener("load", loadBabelThenRun);
 })();
 </script>
 </body>
