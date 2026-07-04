@@ -23,41 +23,52 @@
 
 <!-- Firebase (Realtime Database) via CDN -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-
   // ╔═══════════════════════════════════════════════════════════════╗
   // ║  COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE              ║
-  // ║  (Console Firebase → Configurações do projeto → Seus apps)    ║
+  // ║  (Console Firebase → Configurações do projeto → Geral →        ║
+  // ║   Seus apps → ícone Web </>)                                   ║
   // ╚═══════════════════════════════════════════════════════════════╝
-const firebaseConfig = {
-  apiKey: "AIzaSyBu4KmOasHpI5-WLXci-p6rUCwOwgrcoWc",
-  authDomain: "ecc---recepcao.firebaseapp.com",
-  projectId: "ecc---recepcao",
-  storageBucket: "ecc---recepcao.firebasestorage.app",
-  messagingSenderId: "370972482514",
-  appId: "1:370972482514:web:9bbe960fe81d2df472860b",
-  measurementId: "G-F16H9RWRV4"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyBu4KmOasHpI5-WLXci-p6rUCwOwgrcoWc",
+    authDomain: "ecc---recepcao.firebaseapp.com",
+    databaseURL: "https://ecc---recepcao-default-rtdb.firebaseio.com",
+    projectId: "ecc---recepcao",
+    storageBucket: "ecc---recepcao.firebasestorage.app",
+    messagingSenderId: "370972482514",
+    appId: "1:370972482514:web:9bbe960fe81d2df472860b",
+    measurementId: "G-F16H9RWRV4"
+  };
 
-  // Só ativa o Firebase se a config foi preenchida
-  const configOk = firebaseConfig.apiKey && firebaseConfig.apiKey !== "SUA_API_KEY";
-  if (configOk) {
+  function finish() {
+    window.__eccReady = true;
+    window.dispatchEvent(new Event("ecc-ready"));
+  }
+
+  (async () => {
     try {
+      const configOk = firebaseConfig.apiKey && firebaseConfig.apiKey !== "SUA_API_KEY";
+      if (!configOk) {
+        window.__eccStatus = "sem-config"; // rodando offline (config não preenchida)
+        finish();
+        return;
+      }
+      // imports dinâmicos: falha de rede aqui não derruba o app
+      const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+      const { getDatabase, ref, onValue, set } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js");
       const app = initializeApp(firebaseConfig);
       const db = getDatabase(app);
-      // Todos os dispositivos compartilham o mesmo nó "ecc/marks"
       window.__eccDB = db;
       window.__eccRef = ref(db, "ecc/marks");
       window.__eccOnValue = onValue;
       window.__eccSet = set;
+      window.__eccStatus = "online";
     } catch (e) {
+      window.__eccStatus = "erro";
       console.error("Firebase falhou, rodando offline:", e);
+    } finally {
+      finish();
     }
-  }
-  // Sinaliza que a checagem do Firebase terminou (com ou sem sucesso)
-  window.__eccReady = true;
-  window.dispatchEvent(new Event("ecc-ready"));
+  })();
 </script>
 
 <script type="text/babel" data-presets="react">
@@ -293,6 +304,7 @@ function App() {
   const [marks, setMarksLocal] = useState({});
   const role = getRole(); // "control" (você) ou "view" (visitantes)
   const isController = role === "control";
+  const fbStatus = window.__eccStatus || (window.__eccDB ? "online" : "sem-config");
 
   // Lê o Firebase e converte timestamps -> Date
   useEffect(() => {
@@ -650,6 +662,12 @@ function App() {
               <h1 style={S.title}>Controle do Roteiro</h1>
               <span style={{ ...S.modeBanner, background: isController ? "#3D7A4A" : "#8A6FBF", color: "#fff" }}>
                 {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
+              </span>
+              <span style={{
+                ...S.modeBanner, marginLeft: 6,
+                background: fbStatus === "online" ? "#2E6DA4" : "#C0392B", color: "#fff",
+              }}>
+                {fbStatus === "online" ? "☁ SINCRONIZADO" : fbStatus === "sem-config" ? "⚠ OFFLINE (sem config)" : "⚠ OFFLINE (erro)"}
               </span>
             </div>
           </div>
@@ -1128,13 +1146,30 @@ const S = {
 };
 
 
-// Monta o app quando o Firebase terminar de inicializar (ou falhar)
+// Monta o app quando o Firebase terminar de inicializar (ou falhar).
+// À prova de falhas: monta de qualquer forma após um curto tempo, mesmo que
+// o módulo Firebase não sinalize (ex: erro na config). Assim o app nunca
+// fica preso em "Carregando" — no pior caso, roda em modo offline local.
+let __mounted = false;
 function mount() {
-  const root = ReactDOM.createRoot(document.getElementById("root"));
-  root.render(<App />);
+  if (__mounted) return;
+  __mounted = true;
+  try {
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  } catch (e) {
+    document.getElementById("root").innerHTML =
+      '<div class="ecc-loading">Erro ao iniciar o app. Abra o Console (F12) e me envie a mensagem.<br><br>' +
+      String(e && e.message ? e.message : e) + '</div>';
+    console.error("Falha ao montar o app:", e);
+  }
 }
 if (window.__eccReady) mount();
-else window.addEventListener("ecc-ready", mount, { once: true });
+else {
+  window.addEventListener("ecc-ready", mount, { once: true });
+  // rede de segurança: monta em no máximo 3s, independentemente do Firebase
+  setTimeout(mount, 3000);
+}
 </script>
 </body>
 </html>
