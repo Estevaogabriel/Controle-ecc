@@ -532,6 +532,23 @@ function App() {
   const total = rows.length;
   const encerradas = rows.filter((r) => r.ended).length;
 
+  // ── Status geral e projeção de término do dia ──
+  // Horário previsto de término do dia (fim da última atividade).
+  const lastItem = items[items.length - 1];
+  const plannedEndMs = lastItem ? lastItem.endMs : null;
+  // Projeção: fim previsto deslocado pelo saldo (atraso empurra para frente,
+  // adiantamento puxa para trás). netSec>0 = adiantado.
+  const projectedEndMs = plannedEndMs !== null ? plannedEndMs - netSec * 1000 : null;
+  const fmtHHMM = (ms) => {
+    if (ms === null) return "--:--";
+    const d = new Date(ms);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  // Rótulo de status do evento
+  const netAbs = Math.abs(netSec);
+  const evStatus = netSec > 30 ? "adiantado" : netSec < -30 ? "atrasado" : "no horário";
+  const evColor = netSec > 30 ? "#2E8B57" : netSec < -30 ? "#C0392B" : "#3D7A4A";
+
   // ── LEMBRETES: faltando 15, 10 e 5 min para o fim previsto ──
   // Para a atividade em andamento, calcula o tempo restante e dispara um
   // lembrete ao cruzar cada limiar. Persiste até você dispensar ou encerrar.
@@ -596,6 +613,19 @@ function App() {
         [key]: { startedAt: cur.startedAt || new Date(), endedAt: new Date() },
       };
     });
+  }
+
+  // Reabrir = apagar TUDO daquela atividade, voltando ao estado "aguardando".
+  function reopenActivity(i) {
+    const title = (day.items[i] && day.items[i][3]) || "esta atividade";
+    const ok = window.confirm(
+      `Reabrir "${title}"?\n\nIsso apaga o início e o encerramento registrados, ` +
+      `zerando os dados desta atividade. Não dá para desfazer.`
+    );
+    if (!ok) return;
+    const kp = `${dayKey}-${i}`;
+    [15, 10, 5, 0].forEach((t) => { delete firedRef.current[`${kp}-${t}`]; });
+    setMarks((prev) => ({ ...prev, [kp]: { startedAt: null, endedAt: null } }));
   }
 
   // ── Exportar Excel com o histórico completo dos 3 dias ──
@@ -716,6 +746,29 @@ function App() {
             </button>
           );
         })}
+      </div>
+
+      {/* STATUS GERAL DO EVENTO */}
+      <div style={S.evWrap}>
+        <div style={{ ...S.evCard, background: evColor }}>
+          <div style={S.evHeadline}>
+            {evStatus === "no horário"
+              ? "O evento está no horário"
+              : `O evento está ${evStatus}`}
+          </div>
+          {evStatus !== "no horário" && (
+            <div style={S.evAmount}>
+              {netSec > 0 ? "▲ " : "▼ "}{fmtMinLabel(netAbs)}
+              <span style={S.evAmountWord}>
+                {netSec > 0 ? " adiantado" : " atrasado"}
+              </span>
+            </div>
+          )}
+          <div style={S.evProjection}>
+            Término previsto <b>{fmtHHMM(plannedEndMs)}</b>
+            {" · "}projeção <b>{fmtHHMM(projectedEndMs)}</b>
+          </div>
+        </div>
       </div>
 
       {/* SALDO DO DIA */}
@@ -918,6 +971,7 @@ function App() {
         {rows.map((r) => {
           const c = LOCAL_COLORS[r.local] || "#999";
           const lateWaiting = r.status === "aguardando" && r.lateStartSec > 0;
+          const isNextUp = isToday && r.i === nextPendingIdx && !lateWaiting;
           const stColor =
             r.status === "encerrada" ? "#3D7A4A"
             : r.status === "andamento" ? "#6B4E9E"
@@ -929,6 +983,7 @@ function App() {
                 ...S.row,
                 ...(r.status === "andamento" ? S.rowCurrent : {}),
                 ...(r.status === "encerrada" ? S.rowDone : {}),
+                ...(isNextUp ? S.rowNext : {}),
                 ...(r.totalLateSec > 0 && !r.ended ? S.rowOverrun : {}),
               }}
             >
@@ -938,7 +993,10 @@ function App() {
               </div>
               <div style={{ ...S.rowBar, background: c }} />
               <div style={S.rowBody}>
-                <div style={S.rowTitle}>{r.title}</div>
+                <div style={S.rowTitle}>
+                  {isNextUp && <span style={S.nextChip}>PRÓXIMA</span>}
+                  {r.title}
+                </div>
                 <div style={S.rowMeta}>
                   <span style={{ ...S.rowLocal, color: c }}>{r.local}</span>
                   <span style={{ ...S.rowStatus, color: stColor }}>
@@ -998,7 +1056,7 @@ function App() {
                     {r.status === "andamento" ? "Encerrar" : "Iniciar"}
                   </button>
                 ) : (
-                  <button style={{ ...S.rowBtn, ...S.rowBtnUndo }} onClick={() => toggleEnd(r.i)}>
+                  <button style={{ ...S.rowBtn, ...S.rowBtnUndo }} onClick={() => reopenActivity(r.i)}>
                     Reabrir
                   </button>
                 )}
@@ -1067,6 +1125,12 @@ const S = {
   todayDot: { position: "absolute", top: 7, right: 10, width: 7, height: 7, borderRadius: "50%", background: "#E0544F" },
 
   prejWrap: { padding: "14px 12px 0", background: "#fff" },
+  evWrap: { padding: "14px 12px 0", background: "#fff" },
+  evCard: { color: "#fff", borderRadius: 16, padding: "16px 18px", textAlign: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.10)" },
+  evHeadline: { fontSize: 15, fontWeight: 700, letterSpacing: 0.3, opacity: 0.95 },
+  evAmount: { fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums", lineHeight: 1.1, marginTop: 2 },
+  evAmountWord: { fontSize: 16, fontWeight: 700 },
+  evProjection: { fontSize: 12, opacity: 0.9, marginTop: 6 },
   prejCard: {
     display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
     background: "#FBF9F4", border: "2px solid #CFE0D2", borderRadius: 14, padding: "14px 16px",
@@ -1144,6 +1208,8 @@ const S = {
   list: { padding: "8px 12px 0", background: "#fff" },
   row: { display: "flex", alignItems: "stretch", gap: 10, padding: "10px 6px", borderRadius: 12, position: "relative", borderBottom: "1px solid #F0EADF" },
   rowCurrent: { background: "#F1EAF7", boxShadow: "inset 3px 0 0 #6B4E9E" },
+  rowNext: { background: "#FBF7EC", boxShadow: "inset 3px 0 0 #C77D3A" },
+  nextChip: { fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#fff", background: "#C77D3A", padding: "1px 6px", borderRadius: 6, marginRight: 6, verticalAlign: "middle" },
   rowDone: { opacity: 0.55 },
   rowOverrun: { background: "#FBEAE7", boxShadow: "inset 3px 0 0 #C0392B" },
   rowTime: { width: 46, textAlign: "center", flexShrink: 0 },
