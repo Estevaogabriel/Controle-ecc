@@ -739,6 +739,16 @@ function App() {
   }
 
   return (
+    <div style={S.page}>
+      <style>{css}</style>
+
+      {/* HEADER */}
+      <header style={S.header}>
+        <div style={S.headerInner}>
+          <div style={S.brandRow}>
+            <div style={S.cross} aria-hidden>✝</div>
+            <div>
+              <div style={S.kicker}>Encontro de Casais com Cristo</div>
               <h1 style={S.title}>Controle do Roteiro</h1>
               <span style={{ ...S.modeBanner, background: isController ? "#3D7A4A" : "#8A6FBF", color: "#fff" }}>
                 {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
