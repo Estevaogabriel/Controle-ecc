@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v7 — runtime classico do JSX (React.createElement), sem imports
+// BUILD v8 — roteiro dinamico lido de CSV na nuvem (Google Sheets)
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -93,127 +93,90 @@ function getRole() {
 // encerrada. O contador só para quando o usuário marca "Encerrar".
 // ─────────────────────────────────────────────────────────────
 
-const SCHEDULE = {
-  "sexta": {
-    label: "Sexta-feira",
-    date: "2026-07-03",
-    dateLabel: "03/07/2026",
-    items: [
-      ["19:15", "15", "Sala", "Abertura do Encontro na Sala de Oração"],
-      ["19:30", "15", "Pátio", "Recepção com o Cafezinho (sem a Bandinha)"],
-      ["19:45", "15", "Pátio", "Entrada da Bandinha"],
-      ["20:00", "05", "Passeio", "Deslocamento para o Plenário"],
-      ["20:05", "05", "Plenário", "Boas vindas Pr. Gérson e Graça — Saudação do Casal Apresentador"],
-      ["20:10", "05", "Plenário", "Bandinha — É um prazer e o Hino Oficial"],
-      ["20:15", "30", "Plenário", "PALESTRA: PLANO DE DEUS — Delano & Luana"],
-      ["20:45", "40", "Plenário", "TESTEMUNHO I — Edmundo & Suzi"],
-      ["21:25", "10", "Plenário", "Avisos"],
-      ["21:35", "05", "Plenário", "Momento de Reflexão — Apresentação de Vídeo (Equipe de Som)"],
-      ["21:40", "05", "Passeio", "Saída em Silêncio"],
-    ],
-  },
-  "sabado": {
-    label: "Sábado",
-    date: "2026-07-04",
-    dateLabel: "04/07/2026",
-    items: [
-      ["07:30", "45", "Pátio", "Recepção Boa Vontade (Entrega de Crachás)"],
-      ["08:15", "05", "Pátio", "Entrada do Cafezinho (sem a Bandinha)"],
-      ["08:20", "10", "Pátio", "Entrada da Bandinha"],
-      ["08:30", "05", "Passeio", "Deslocamento para o Plenário"],
-      ["08:35", "15", "Plenário", "DEVOCIONAL: CERIMONIAL"],
-      ["08:50", "05", "Plenário", "LOUVOR com a Bandinha (Hino Oficial)"],
-      ["08:55", "40", "Plenário", "PALESTRA: HARMONIA CONJUGAL — Harim & Rose"],
-      ["09:35", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
-      ["09:40", "20", "Salas", "CÍRCULOS: HARMONIA CONJUGAL"],
-      ["10:00", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
-      ["10:05", "15", "Pátio", "CAFEZINHO, Bandinha e CORREIOS"],
-      ["10:20", "05", "Passeio", "Deslocamento para o Plenário"],
-      ["10:25", "20", "Plenário", "APRESENTAÇÃO DOS CÍRCULOS"],
-      ["10:45", "05", "Plenário", "LOUVOR com a Bandinha"],
-      ["10:50", "40", "Plenário", "PALESTRA: DIÁLOGO C/ OS FILHOS — Robson & Daniele"],
-      ["11:30", "05", "Plenário", "LOUVOR: “UTOPIA” (Bandinha entra e sai em silêncio)"],
-      ["11:35", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS (em silêncio)"],
-      ["11:40", "20", "Pátio", "CONVERSA A DOIS"],
-      ["12:00", "10", "Passeio", "Deslocamento para o ALMOÇO com a Bandinha"],
-      ["12:10", "60", "Refeitório", "ALMOÇO — Bandinha cantar agradecendo o Almoço"],
-      ["13:10", "05", "Passeio", "Deslocamento para o auditório com a Bandinha"],
-      ["13:15", "30", "Plenário", "SOCIODRAMA I: FAMÍLIA FELIZ — Josimar & Lígia"],
-      ["13:45", "05", "Passeio", "Deslocamento para os Círculos com a Bandinha"],
-      ["13:50", "30", "Salas", "CÍRCULOS: DOS CARTAZES"],
-      ["14:20", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
-      ["14:25", "20", "Plenário", "APRESENTAÇÃO DOS CARTAZES"],
-      ["14:45", "05", "Plenário", "LOUVOR com a Bandinha (01 LOUVOR)"],
-      ["14:55", "20", "Plenário", "LOUVOR com a Bandinha (pó ró pó pó - Maestro) Daniel"],
-      ["15:15", "40", "Plenário", "TESTEMUNHO II — Lavoisier & Márcia"],
-      ["15:55", "10", "Plenário", "LOUVOR: O TEMPO NÃO PODE APAGAR... (Sair em silêncio)"],
-      ["16:05", "40", "Plenário", "PALESTRA: SENTIDO DA VIDA — José Rodrigues & Cristina"],
-      ["16:45", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
-      ["16:50", "15", "Pátio", "CAFEZINHO, Bandinha e CORREIOS"],
-      ["17:05", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
-      ["17:10", "40", "Plenário", "PALESTRA: ALIANÇA & RECONCILIAÇÃO — Jones Bidart & Ana Lúcia"],
-      ["17:50", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
-      ["17:55", "20", "Salas", "CÍRCULOS: O FILHO PRÓDIGO"],
-      ["18:15", "05", "Passeio", "Deslocamento para o Plenário (Bandinha não entra)"],
-      ["18:20", "15", "Plenário", "APRESENTAÇÃO DOS CÍRCULOS"],
-      ["18:35", "40", "Plenário", "PALESTRA: SEXUALIDADE — Gilmar & Midian"],
-      ["19:15", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS"],
-      ["19:20", "20", "Pátio", "CONVERSA A DOIS"],
-      ["19:40", "10", "Passeio", "PASSEIO com a Bandinha: (Como é grande o meu amor por você)"],
-      ["19:50", "05", "Passeio", "Deslocamento para o JANTAR com a Bandinha"],
-      ["19:55", "40", "Refeitório", "JANTAR DE GALA — Bandinha (Amar Você - Fernanda Brum)"],
-      ["20:35", "10", "Refeitório", "Avisos Finais e Saída em Silêncio"],
-    ],
-  },
-  "domingo": {
-    label: "Domingo",
-    date: "2026-07-05",
-    dateLabel: "05/07/2026",
-    items: [
-      ["07:30", "45", "Pátio", "Recepção Boa Vontade (Entrega de Crachás)"],
-      ["08:15", "05", "Pátio", "Recepção com a Bandinha (sem o cafezinho)"],
-      ["08:20", "05", "Pátio", "Entrada do Cafezinho"],
-      ["08:25", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
-      ["08:30", "15", "Plenário", "DEVOCIONAL: CERIMONIAL"],
-      ["08:45", "05", "Plenário", "LOUVOR com a Bandinha (entra em silêncio e canta um Hino)"],
-      ["08:50", "40", "Plenário", "PALESTRA: O CASAL E AS FINANÇAS — Filipe & Kaline"],
-      ["09:30", "05", "Passeio", "Deslocamento para o CAFEZINHO com a Bandinha"],
-      ["09:35", "15", "Pátio", "CAFEZINHO com a Bandinha e CORREIOS"],
-      ["09:50", "05", "Passeio", "Deslocamento para o Plenário (Bandinha não entra)"],
-      ["09:55", "40", "Plenário", "PALESTRA: FÉ E ORAÇÃO — Josa & Rosa"],
-      ["10:35", "05", "Passeio", "Deslocamento para a CONVERSA A DOIS (em silêncio)"],
-      ["10:40", "15", "Pátio", "CONVERSA A DOIS"],
-      ["10:55", "05", "Passeio", "Deslocamento para o Plenário com a Bandinha"],
-      ["11:00", "15", "Plenário", "LOUVOR com a Bandinha (pó ró pó pó - Maestro) - Daniel"],
-      ["11:15", "30", "Plenário", "PALESTRA: CASAL CRISTÃO — Vanilson & Sunamita"],
-      ["11:45", "05", "Passeio", "Deslocamento para o ALMOÇO com a Bandinha"],
-      ["11:50", "60", "Refeitório", "ALMOÇO com a Bandinha agradecendo o Almoço"],
-      ["12:50", "20", "Passeio", "CORREDOR DE BEIJOS (Equipes Garçons / Cafezinho)"],
-      ["13:10", "15", "Plenário", "VAQUINHA — Ávila & Fernanda"],
-      ["13:25", "20", "Plenário", "SOCIODRAMA II: CONVITE PARA O ECC — Josimar & Lígia"],
-      ["13:45", "05", "Passeio", "Deslocamento para os CÍRCULOS com a Bandinha"],
-      ["13:50", "15", "Salas", "CÍRCULOS: O BOM SEMEADOR"],
-      ["14:05", "05", "Passeio", "Deslocamento para a APRESENTAÇÃO DAS EQUIPES"],
-      ["14:10", "30", "Pátio", "APRESENTAÇÃO DAS EQUIPES"],
-      ["14:40", "05", "Passeio", "Deslocamento para o Plenário"],
-      ["14:45", "15", "Plenário", "ENTREGA DAS SACOLAS (Equipe da Externa)"],
-      ["15:00", "20", "Passeio", "CORTEJO NUPCIAL"],
-      ["15:20", "50", "Pátio", "CERIMÔNIA DE ENCERRAMENTO — Pr. Gerson & Graça"],
-      ["16:10", "10", "Passeio", "Saída (Casal Apresentador / Equipes / Confraternização)"],
-    ],
-  },
-};
+// ── CONFIGURAÇÃO: URL do roteiro (Google Sheets publicado como CSV) ──
+// Publique a planilha: Arquivo → Compartilhar → Publicar na web → escolha a
+// aba → formato CSV → Publicar. Cole a URL resultante aqui embaixo.
+// Colunas esperadas (com cabeçalho): dia,dia_label,data,hora,local,tempo,evento
+const CSV_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vQqiTlfdQ2EHEhoi_VVVtaBNazkx5cEWz21X2na4-peqIDe5mNj3xo4J2YI4t6i08lPV9QHF92XCNcc/pub?gid=1780870420&single=true&output=csv;
 
-const LOCAL_COLORS = {
-  "Plenário": "#6B4E9E",
-  "Pátio": "#C77D3A",
-  "Passeio": "#4A8A8C",
-  "Salas": "#B0537A",
-  "Refeitório": "#3D7A4A",
-  "Sala": "#5A6EA8",
+// Paleta para colorir locais. Locais não listados recebem cor estável por nome.
+const LOCAL_COLORS_BASE = {
+  "PLENÁRIO": "#6B4E9E",
+  "PÁTIO": "#C77D3A",
+  "PASSEIO": "#4A8A8C",
+  "SALAS": "#B0537A",
+  "SALA": "#5A6EA8",
+  "REFEITÓRIO": "#3D7A4A",
+  "QUADRA": "#2E6DA4",
 };
+const PALETTE = ["#6B4E9E","#C77D3A","#4A8A8C","#B0537A","#3D7A4A","#2E6DA4","#8A6D2B","#985F99","#517A52","#A0524D"];
+function colorForLocal(local) {
+  const key = (local || "").trim().toUpperCase();
+  if (LOCAL_COLORS_BASE[key]) return LOCAL_COLORS_BASE[key];
+  let hval = 0;
+  for (let i = 0; i < key.length; i++) hval = (hval * 31 + key.charCodeAt(i)) >>> 0;
+  return PALETTE[hval % PALETTE.length];
+}
 
-const DAY_KEYS = ["sexta", "sabado", "domingo"];
+// Parser de CSV (lida com aspas e vírgulas internas).
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], nx = text[i + 1];
+    if (inQ) {
+      if (ch === '"' && nx === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQ = false; }
+      else field += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ",") { row.push(field); field = ""; }
+      else if (ch === "\r") { /* ignora */ }
+      else if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else field += ch;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Converte as linhas do CSV no formato SCHEDULE usado pelo app.
+function buildSchedule(csvText) {
+  const rows = parseCSV(csvText).filter(r => r.some(c => (c || "").trim() !== ""));
+  if (!rows.length) return { schedule: {}, dayKeys: [] };
+  const header = rows[0].map(c => c.trim().toLowerCase());
+  const idx = (name) => header.indexOf(name);
+  const iDia = idx("dia"), iLabel = idx("dia_label"), iData = idx("data"),
+        iHora = idx("hora"), iLocal = idx("local"), iTempo = idx("tempo"), iEvento = idx("evento");
+  const schedule = {};
+  const order = [];
+  for (let r = 1; r < rows.length; r++) {
+    const c = rows[r];
+    const dia = (c[iDia] || "").trim();
+    const hora = (c[iHora] || "").trim();
+    if (!dia || !/^\d{1,2}:\d{2}/.test(hora)) continue;
+    if (!schedule[dia]) {
+      schedule[dia] = {
+        label: (c[iLabel] || dia).trim(),
+        date: (c[iData] || "").trim(),
+        dateLabel: fmtDateLabel((c[iData] || "").trim()),
+        items: [],
+      };
+      order.push(dia);
+    }
+    const dur = (c[iTempo] || "0").toString().replace(/[^0-9]/g, "") || "0";
+    schedule[dia].items.push([normHora(hora), dur, (c[iLocal] || "").trim(), (c[iEvento] || "").trim()]);
+  }
+  return { schedule, dayKeys: order };
+}
+function normHora(s) {
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? String(+m[1]).padStart(2,"0") + ":" + m[2] : String(s).trim();
+}
+function fmtDateLabel(iso) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : iso;
+}
 
 function toMinutes(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -254,9 +217,10 @@ function fmtMinLabel(totalSec) {
   if (s === 0) return `${m} min`;
   return `${m} min ${s}s`;
 }
-function detectTodayKey(now) {
+function detectTodayKey(now, schedule, dayKeys) {
+  if (!dayKeys || !dayKeys.length) return "";
   const iso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return DAY_KEYS.find((k) => SCHEDULE[k].date === iso) || "sexta";
+  return dayKeys.find((k) => schedule[k] && schedule[k].date === iso) || dayKeys[0];
 }
 
 // Som de lembrete via Web Audio (sem arquivo externo).
@@ -294,7 +258,41 @@ function beep(threshold) {
 
 function App() {
   const [now, setNow] = useState(new Date());
-  const [dayKey, setDayKey] = useState(() => detectTodayKey(new Date()));
+  // Roteiro carregado dinamicamente do CSV (Google Sheets publicado).
+  const [schedule, setSchedule] = useState({});
+  const [dayKeys, setDayKeys] = useState([]);
+  const [loadState, setLoadState] = useState("loading"); // loading | ready | error
+  const [loadError, setLoadError] = useState("");
+  const [dayKey, setDayKey] = useState("");
+
+  // Busca o CSV do roteiro ao abrir.
+  useEffect(() => {
+    let cancel = false;
+    async function load() {
+      try {
+        if (!CSV_URL || CSV_URL.indexOf("COLE_AQUI") === 0) {
+          throw new Error("URL do roteiro não configurada (CSV_URL).");
+        }
+        const url = CSV_URL + (CSV_URL.indexOf("?") >= 0 ? "&" : "?") + "_ts=" + Date.now();
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error("Falha ao baixar o roteiro (HTTP " + resp.status + ").");
+        const text = await resp.text();
+        const { schedule: sc, dayKeys: dk } = buildSchedule(text);
+        if (!dk.length) throw new Error("O roteiro está vazio ou em formato inesperado.");
+        if (cancel) return;
+        setSchedule(sc);
+        setDayKeys(dk);
+        setDayKey(detectTodayKey(new Date(), sc, dk));
+        setLoadState("ready");
+      } catch (e) {
+        if (cancel) return;
+        setLoadError(String(e && e.message ? e.message : e));
+        setLoadState("error");
+      }
+    }
+    load();
+    return () => { cancel = true; };
+  }, []);
 
   // Estado por atividade. Chave: "dia-indice".
   // { startedAt: Date|null, endedAt: Date|null }
@@ -358,8 +356,8 @@ function App() {
     return () => clearInterval(t);
   }, []);
 
-  const todayKey = detectTodayKey(now);
-  const day = SCHEDULE[dayKey];
+  const todayKey = detectTodayKey(now, schedule, dayKeys);
+  const day = schedule[dayKey] || { label: "", date: "", dateLabel: "", items: [] };
   const isToday = dayKey === todayKey;
 
   const nowMs = now.getTime();
@@ -639,8 +637,8 @@ function App() {
     };
     const wb = window.XLSX.utils.book_new();
 
-    DAY_KEYS.forEach((dk) => {
-      const d = SCHEDULE[dk];
+    dayKeys.forEach((dk) => {
+      const d = schedule[dk];
       const rowsOut = d.items.map(([start, dur, local, title], i) => {
         const s = toMinutes(start);
         const durMin = Number(dur);
@@ -701,17 +699,46 @@ function App() {
     }
   }
 
-  return (
-    <div style={S.page}>
-      <style>{css}</style>
-
-      {/* HEADER */}
-      <header style={S.header}>
-        <div style={S.headerInner}>
-          <div style={S.brandRow}>
-            <div style={S.cross} aria-hidden>✝</div>
+  // Telas de carregamento / erro do roteiro
+  if (loadState !== "ready") {
+    return (
+      <div style={S.page}>
+        <style>{css}</style>
+        <header style={S.header}>
+          <div style={S.headerInner}>
+            <div style={S.brandRow}>
+              <div style={S.cross} aria-hidden>✝</div>
+              <div>
+                <div style={S.kicker}>Encontro de Casais com Cristo</div>
+                <h1 style={S.title}>Controle do Roteiro</h1>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div style={{ padding: 32, textAlign: "center" }}>
+          {loadState === "loading" ? (
             <div>
-              <div style={S.kicker}>XXXII Encontro de Casais com Cristo</div>
+              <div style={{ fontSize: 16, color: "#6B4E9E", fontWeight: 700 }}>Carregando o roteiro…</div>
+              <div style={{ fontSize: 13, color: "#8A7F6E", marginTop: 8 }}>Buscando a planilha na nuvem.</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 16, color: "#C0392B", fontWeight: 700 }}>Não foi possível carregar o roteiro</div>
+              <div style={{ fontSize: 13, color: "#8A7F6E", marginTop: 8 }}>{loadError}</div>
+              <div style={{ fontSize: 12, color: "#A89C88", marginTop: 12 }}>
+                Verifique se a planilha foi publicada como CSV e se a URL (CSV_URL) está correta no arquivo.
+              </div>
+              <button style={{ ...S.exportBtn, marginTop: 16 }} onClick={() => window.location.reload()}>
+                Tentar de novo
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
               <h1 style={S.title}>Controle do Roteiro</h1>
               <span style={{ ...S.modeBanner, background: isController ? "#3D7A4A" : "#8A6FBF", color: "#fff" }}>
                 {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
@@ -735,14 +762,14 @@ function App() {
 
       {/* DAY TABS */}
       <div style={S.tabs}>
-        {DAY_KEYS.map((k) => {
+        {dayKeys.map((k) => {
           const active = k === dayKey;
           const isThatToday = k === todayKey;
           return (
             <button key={k} onClick={() => setDayKey(k)} style={{ ...S.tab, ...(active ? S.tabActive : {}) }}>
-              {SCHEDULE[k].label}
+              {schedule[k].label}
               {isThatToday && <span style={S.todayDot} title="Hoje" />}
-              <span style={S.tabDate}>{SCHEDULE[k].dateLabel}</span>
+              <span style={S.tabDate}>{schedule[k].dateLabel}</span>
             </button>
           );
         })}
@@ -862,7 +889,7 @@ function App() {
                   <span style={S.waitDot} />AGUARDANDO INÍCIO
                 </span>
               )}
-              <span style={{ ...S.localChip, background: LOCAL_COLORS[currentRow.local] }}>
+              <span style={{ ...S.localChip, background: colorForLocal(currentRow.local) }}>
                 {currentRow.local}
               </span>
             </div>
@@ -960,7 +987,7 @@ function App() {
             <div style={S.idleSub}>
               {isToday
                 ? "Toque em Iniciar na próxima atividade quando ela começar."
-                : `O acompanhamento ao vivo funciona em ${SCHEDULE[todayKey].label}.`}
+                : `O acompanhamento ao vivo funciona em ${(schedule[todayKey] && schedule[todayKey].label) || "outro dia"}.`}
             </div>
           </div>
         </div>
@@ -969,7 +996,7 @@ function App() {
       {/* TIMELINE */}
       <main style={S.list}>
         {rows.map((r) => {
-          const c = LOCAL_COLORS[r.local] || "#999";
+          const c = colorForLocal(r.local);
           const lateWaiting = r.status === "aguardando" && r.lateStartSec > 0;
           const isNextUp = isToday && r.i === nextPendingIdx && !lateWaiting;
           const stColor =
@@ -1278,7 +1305,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v7 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v8 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
