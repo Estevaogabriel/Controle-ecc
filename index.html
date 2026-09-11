@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v8 — roteiro dinamico lido de CSV na nuvem (Google Sheets)
+// BUILD v10 — calculo de atraso por horario do dia (ignora a data)
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -358,16 +358,27 @@ function App() {
 
   const todayKey = detectTodayKey(now, schedule, dayKeys);
   const day = schedule[dayKey] || { label: "", date: "", dateLabel: "", items: [] };
-  const isToday = dayKey === todayKey;
+  // Os cálculos de atraso/adiantamento comparam só o horário do dia, então
+  // podem rodar sempre que um dia está sendo visualizado (não exigem "hoje").
+  const calcActive = !!dayKey;
 
-  const nowMs = now.getTime();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-
-  // Data base do dia selecionado (para converter horário previsto em timestamp)
-  const dayDate = day.date; // "2026-07-04"
+  // ── Cálculo por HORÁRIO DO DIA (ignora a data) ──
+  // Todo cálculo de atraso/adiantamento compara apenas HH:MM:SS. Para isso,
+  // projetamos "agora" e as marcações (início/fim reais) na MESMA data base
+  // do dia previsto. Assim o app funciona corretamente em qualquer data.
+  const dayDate = day.date || "2026-01-01"; // data base do dia selecionado
   function plannedMs(hhmm) {
     return new Date(`${dayDate}T${hhmm}:00`).getTime();
   }
+  // Projeta um Date qualquer na data base, mantendo só hora:min:seg.
+  function timeOfDayMs(d) {
+    const base = new Date(`${dayDate}T00:00:00`);
+    base.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+    return base.getTime();
+  }
+  // "agora" projetado na data do dia (só o horário conta)
+  const nowMs = timeOfDayMs(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
 
   const items = useMemo(() => {
     return day.items.map(([start, dur, local, title], i) => {
@@ -387,6 +398,9 @@ function App() {
   function markFor(i) {
     return marks[`${dayKey}-${i}`] || { startedAt: null, endedAt: null };
   }
+  // Marcações projetadas na data base (só horário) para os cálculos de desvio.
+  function startedMs(m) { return m.startedAt ? timeOfDayMs(m.startedAt) : null; }
+  function endedMs(m) { return m.endedAt ? timeOfDayMs(m.endedAt) : null; }
 
   // ── Cálculo de status + atraso/ganho por atividade ──
   // O atraso de INÍCIO só conta para UMA atividade por vez: a próxima da
@@ -437,7 +451,7 @@ function App() {
     // por isso não somamos início + término para atividades já começadas.
     if (!started) {
       const isNext = it.i === nextPendingIdx;
-      if (isToday && anyStarted && isNext && nowMs > it.startMs) {
+      if (calcActive && anyStarted && isNext && nowMs > it.startMs) {
         lateStartSec = Math.round((nowMs - it.startMs) / 1000);
       }
     }
@@ -450,9 +464,12 @@ function App() {
     let realElapsedSec = 0;     // decorrido desde o CLIQUE em Iniciar (duração real)
     let overFromStartSec = 0;   // quanto passou da duração prevista, contado desde o início
     if (started) {
-      const endRefMs = ended ? m.endedAt.getTime() : nowMs;
+      const endRefMs = ended ? endedMs(m) : nowMs;
       elapsedSec = Math.max(0, Math.round((endRefMs - it.startMs) / 1000));
-      realElapsedSec = Math.max(0, Math.round((endRefMs - m.startedAt.getTime()) / 1000));
+      // realElapsedSec usa o tempo REAL cronometrado (não normalizado), pois é
+      // a duração efetiva desde o clique em Iniciar.
+      const realEndMs = ended ? m.endedAt.getTime() : now.getTime();
+      realElapsedSec = Math.max(0, Math.round((realEndMs - m.startedAt.getTime()) / 1000));
       overFromStartSec = Math.max(0, realElapsedSec - plannedDurSec);
       const deltaSec = elapsedSec - plannedDurSec; // + passou do previsto, − ainda dentro
       if (deltaSec > 0) {
@@ -478,22 +495,22 @@ function App() {
     let scheduleDeviationSec = null;
     if (ended) {
       // encerrada: real vs fim previsto
-      scheduleDeviationSec = Math.round((m.endedAt.getTime() - it.endMs) / 1000);
+      scheduleDeviationSec = Math.round((endedMs(m) - it.endMs) / 1000);
     } else if (started) {
       // em andamento: se já passou do fim previsto, está atrasando em tempo real;
       // senão, mostra a folga (adiantamento projetado se encerrar agora).
       scheduleDeviationSec = Math.round((nowMs - it.endMs) / 1000);
-    } else if (isToday && nowMs > it.startMs) {
+    } else if (calcActive && nowMs > it.startMs) {
       // aguardando e já deveria ter começado: atrasada pelo tempo parado
       scheduleDeviationSec = Math.round((nowMs - it.startMs) / 1000);
     }
 
     // ── Desvio de INÍCIO: início real vs início previsto no cronograma ──
     // Só existe quando a atividade já foi iniciada. Positivo = começou atrasada;
-    // negativo = começou adiantada.
+    // negativo = começou adiantada. Usa só o horário do dia (ignora a data).
     let startDeviationSec = null;
     if (m.startedAt) {
-      startDeviationSec = Math.round((m.startedAt.getTime() - it.startMs) / 1000);
+      startDeviationSec = Math.round((startedMs(m) - it.startMs) / 1000);
     }
 
     return {
@@ -893,7 +910,7 @@ function App() {
       )}
 
       {/* ATIVIDADE ATUAL */}
-      {isToday && currentRow ? (
+      {calcActive && currentRow ? (
         <div style={S.nowWrap}>
           <div style={{ ...S.nowCard, borderColor: currentRow.totalLateSec > 0 ? "#E3B7B2" : "#E0D5EE" }}>
             <div style={S.nowLabelRow}>
@@ -999,12 +1016,10 @@ function App() {
         <div style={S.nowWrap}>
           <div style={S.nowCardIdle}>
             <div style={S.idleTitle}>
-              {isToday ? "Nenhuma atividade em andamento" : `Visualizando ${day.label}`}
+              Nenhuma atividade em andamento
             </div>
             <div style={S.idleSub}>
-              {isToday
-                ? "Toque em Iniciar na próxima atividade quando ela começar."
-                : `O acompanhamento ao vivo funciona em ${(schedule[todayKey] && schedule[todayKey].label) || "outro dia"}.`}
+              Toque em Iniciar na próxima atividade quando ela começar.
             </div>
           </div>
         </div>
@@ -1015,7 +1030,7 @@ function App() {
         {rows.map((r) => {
           const c = colorForLocal(r.local);
           const lateWaiting = r.status === "aguardando" && r.lateStartSec > 0;
-          const isNextUp = isToday && r.i === nextPendingIdx && !lateWaiting;
+          const isNextUp = calcActive && r.i === nextPendingIdx && !lateWaiting;
           const stColor =
             r.status === "encerrada" ? "#3D7A4A"
             : r.status === "andamento" ? "#6B4E9E"
@@ -1323,7 +1338,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v8 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v10 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
