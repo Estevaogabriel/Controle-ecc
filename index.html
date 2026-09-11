@@ -504,19 +504,7 @@ function App() {
     };
   });
 
-  // Atraso acumulado do dia (início + término, de todas as atividades)
-  const totalLateSec = rows.reduce((a, r) => a + r.totalLateSec, 0);
-  // Tempo ganho acumulado (atividades que duraram menos que o previsto)
-  const totalGainSec = rows.reduce((a, r) => a + r.gainSec, 0);
-  // Atraso total de INÍCIO: soma dos minutos que cada atividade iniciada
-  // começou depois do horário previsto (só as que começaram atrasadas).
-  const totalStartLateSec = rows.reduce(
-    (a, r) => a + (r.startDeviationSec && r.startDeviationSec > 0 ? r.startDeviationSec : 0),
-    0
-  );
-  // Saldo líquido: ganho − atraso. Positivo = adiantado; negativo = atrasado.
-  const netSec = totalGainSec - totalLateSec;
-  // Atrasos "ativos" = contando agora (não encerradas com atraso em curso)
+  // Atividades passando do tempo agora (excedente ativo, não somatório).
   const liveOverrunRows = rows.filter((r) => !r.ended && r.totalLateSec > 0);
 
   // Atividade em andamento (iniciada e não encerrada)
@@ -530,22 +518,38 @@ function App() {
   const total = rows.length;
   const encerradas = rows.filter((r) => r.ended).length;
 
-  // ── Status geral e projeção de término do dia ──
-  // Horário previsto de término do dia (fim da última atividade).
+  // ── PLACAR DO EVENTO (não acumulativo) ──
+  // Reflete o desvio da ÚLTIMA atividade iniciada em relação ao horário
+  // previsto de início dela: início real − início previsto.
+  // Cada nova atividade iniciada SUBSTITUI o valor (não soma).
+  //   desvio > 0  → começou depois do previsto → evento ATRASADO
+  //   desvio < 0  → começou antes do previsto  → evento ADIANTADO
+  let lastStartedRow = null;
+  for (let k = rows.length - 1; k >= 0; k--) {
+    if (rows[k].started) { lastStartedRow = rows[k]; break; }
+  }
+  const evDeviationSec = lastStartedRow && lastStartedRow.startDeviationSec !== null
+    ? lastStartedRow.startDeviationSec
+    : null; // null = nenhuma atividade iniciada ainda
+  const evAtrasado = evDeviationSec !== null && evDeviationSec > 30;
+  const evAdiantado = evDeviationSec !== null && evDeviationSec < -30;
+  const evStatus = evDeviationSec === null ? "aguardando"
+    : evAtrasado ? "atrasado" : evAdiantado ? "adiantado" : "no horário";
+  const evColor = evAtrasado ? "#C0392B" : evAdiantado ? "#2E8B57" : "#3D7A4A";
+  const evAbs = evDeviationSec !== null ? Math.abs(evDeviationSec) : 0;
+
+  // ── Projeção de término do dia ──
+  // Desloca o fim previsto pelo desvio atual (atraso empurra para frente).
   const lastItem = items[items.length - 1];
   const plannedEndMs = lastItem ? lastItem.endMs : null;
-  // Projeção: fim previsto deslocado pelo saldo (atraso empurra para frente,
-  // adiantamento puxa para trás). netSec>0 = adiantado.
-  const projectedEndMs = plannedEndMs !== null ? plannedEndMs - netSec * 1000 : null;
+  const projectedEndMs = (plannedEndMs !== null && evDeviationSec !== null)
+    ? plannedEndMs + evDeviationSec * 1000
+    : plannedEndMs;
   const fmtHHMM = (ms) => {
-    if (ms === null) return "--:--";
+    if (ms === null || ms === undefined) return "--:--";
     const d = new Date(ms);
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
-  // Rótulo de status do evento
-  const netAbs = Math.abs(netSec);
-  const evStatus = netSec > 30 ? "adiantado" : netSec < -30 ? "atrasado" : "no horário";
-  const evColor = netSec > 30 ? "#2E8B57" : netSec < -30 ? "#C0392B" : "#3D7A4A";
 
   // ── LEMBRETES: faltando 15, 10 e 5 min para o fim previsto ──
   // Para a atividade em andamento, calcula o tempo restante e dispara um
@@ -788,17 +792,25 @@ function App() {
       {/* STATUS GERAL DO EVENTO */}
       <div style={S.evWrap}>
         <div style={{ ...S.evCard, background: evColor }}>
-          <div style={S.evHeadline}>
-            {evStatus === "no horário"
-              ? "O evento está no horário"
-              : `O evento está ${evStatus}`}
-          </div>
-          {evStatus !== "no horário" && (
-            <div style={S.evAmount}>
-              {netSec > 0 ? "▲ " : "▼ "}{fmtMinLabel(netAbs)}
-              <span style={S.evAmountWord}>
-                {netSec > 0 ? " adiantado" : " atrasado"}
-              </span>
+          {evStatus === "aguardando" ? (
+            <div style={S.evHeadline}>Aguardando o início da primeira atividade</div>
+          ) : (
+            <div>
+              <div style={S.evHeadline}>
+                {evStatus === "no horário" ? "O evento está no horário" : `O evento está ${evStatus}`}
+              </div>
+              {evStatus !== "no horário" && (
+                <div style={S.evAmount}>
+                  {evAtrasado ? "▼ " : "▲ "}{fmtMinLabel(evAbs)}
+                  <span style={S.evAmountWord}>{evAtrasado ? " atrasado" : " adiantado"}</span>
+                </div>
+              )}
+              {lastStartedRow && (
+                <div style={S.evRef}>
+                  ref.: {lastStartedRow.title.length > 40 ? lastStartedRow.title.slice(0, 40) + "…" : lastStartedRow.title}
+                  {" "}(previsto {lastStartedRow.start})
+                </div>
+              )}
             </div>
           )}
           <div style={S.evProjection}>
@@ -808,26 +820,19 @@ function App() {
         </div>
       </div>
 
-      {/* SALDO DO DIA */}
+      {/* PROGRESSO DO DIA */}
       <div style={S.prejWrap}>
-        <div style={{ ...S.prejCard, borderColor: netSec < 0 ? "#E3B7B2" : netSec > 0 ? "#B9D4C0" : "#CFE0D2" }}>
+        <div style={{ ...S.prejCard, borderColor: liveOverrunRows.length > 0 ? "#E3B7B2" : "#CFE0D2" }}>
           <div style={S.prejLeft}>
-            <div style={S.prejTop}>Saldo do dia</div>
-            <div style={{ ...S.prejValue, color: netSec < 0 ? "#C0392B" : netSec > 0 ? "#2E8B57" : "#3D7A4A" }}>
-              {netSec > 0 ? "+" : netSec < 0 ? "−" : ""}{fmtMinLabel(netSec)}
-            </div>
-            <div style={S.prejBreak}>
-              <span style={S.prejGain}>▲ ganho {fmtMinLabel(totalGainSec)}</span>
-              <span style={S.prejLoss}>▼ atraso {fmtMinLabel(totalLateSec)}</span>
-            </div>
-            <div style={S.prejStartLate}>
-              ⏱ Atraso total de início: <b>{fmtMinLabel(totalStartLateSec)}</b>
+            <div style={S.prejTop}>Progresso do dia</div>
+            <div style={{ ...S.prejValue, color: "#4A3B6B" }}>
+              {encerradas}<span style={{ fontSize: 18, fontWeight: 700 }}> / {total}</span>
             </div>
             <div style={S.prejSub}>
-              {encerradas} de {total} atividades encerradas
+              atividades encerradas
               {liveOverrunRows.length > 0 && (
                 <span style={S.prejLiveTag}>
-                  {" · "}{liveOverrunRows.length} estourando agora
+                  {" · "}{liveOverrunRows.length} passando do tempo agora
                 </span>
               )}
             </div>
@@ -835,14 +840,16 @@ function App() {
           <div style={S.prejBadge}>
             <div style={{
               ...S.prejBadgeInner,
-              background: liveOverrunRows.length > 0 ? "#C0392B" : netSec < 0 ? "#C77D3A" : netSec > 0 ? "#2E8B57" : "#3D7A4A",
+              background: liveOverrunRows.length > 0 ? "#C0392B" : evAtrasado ? "#C77D3A" : evAdiantado ? "#2E8B57" : "#3D7A4A",
             }} className={liveOverrunRows.length > 0 ? "pulse" : ""}>
               {liveOverrunRows.length > 0
-                ? "⏱ ATRASO ATIVO"
-                : netSec > 0
-                ? "ADIANTADO"
-                : netSec < 0
+                ? "⏱ PASSANDO DO TEMPO"
+                : evStatus === "aguardando"
+                ? "AGUARDANDO"
+                : evAtrasado
                 ? "ATRASADO"
+                : evAdiantado
+                ? "ADIANTADO"
                 : "EM DIA"}
             </div>
           </div>
@@ -1168,6 +1175,7 @@ const S = {
   evAmount: { fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums", lineHeight: 1.1, marginTop: 2 },
   evAmountWord: { fontSize: 16, fontWeight: 700 },
   evProjection: { fontSize: 12, opacity: 0.9, marginTop: 6 },
+  evRef: { fontSize: 11, opacity: 0.85, marginTop: 4 },
   prejCard: {
     display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
     background: "#FBF9F4", border: "2px solid #CFE0D2", borderRadius: 14, padding: "14px 16px",
