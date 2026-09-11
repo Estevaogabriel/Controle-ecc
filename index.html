@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v10 — calculo de atraso por horario do dia (ignora a data)
+// BUILD v11 — avisa ao iniciar atividade com outra em andamento
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -607,15 +607,43 @@ function App() {
   }, [runningRow ? runningRow.i : -1, dayKey]);
 
   function toggleStart(i) {
-    // ao (re)iniciar, limpa lembretes já disparados dessa atividade
     const kp = `${dayKey}-${i}`;
+    const cur = marks[kp] || { startedAt: null, endedAt: null };
+
+    // Se NÃO está iniciada, vamos iniciar: checa se há outra em andamento.
+    if (!cur.startedAt) {
+      const running = rows.find((r) => r.status === "andamento");
+      if (running && running.i !== i) {
+        const alvo = (day.items[i] && day.items[i][3]) || "esta atividade";
+        const proceed = window.confirm(
+          `"${running.title}" ainda está em andamento.\n\n` +
+          `Você está iniciando "${alvo}" antes de encerrar a anterior.\n\n` +
+          `OK = encerrar "${running.title}" agora e iniciar a nova.\n` +
+          `Cancelar = voltar (nada muda).`
+        );
+        if (!proceed) return; // decidiu não prosseguir
+        // encerra a anterior e inicia a nova, numa só atualização
+        [15, 10, 5, 0].forEach((t) => { delete firedRef.current[`${kp}-${t}`]; });
+        const prevKp = `${dayKey}-${running.i}`;
+        const agora = new Date();
+        setMarks((prev) => {
+          const prevCur = prev[prevKp] || { startedAt: null, endedAt: null };
+          return {
+            ...prev,
+            [prevKp]: { startedAt: prevCur.startedAt || agora, endedAt: agora },
+            [kp]: { startedAt: agora, endedAt: null },
+          };
+        });
+        return;
+      }
+    }
+
+    // Fluxo normal (sem conflito): inicia, ou desfaz se já iniciada.
     [15, 10, 5, 0].forEach((t) => { delete firedRef.current[`${kp}-${t}`]; });
     setMarks((prev) => {
-      const key = `${dayKey}-${i}`;
-      const cur = prev[key] || { startedAt: null, endedAt: null };
-      // Se já iniciada, desfaz início (e encerramento)
-      if (cur.startedAt) return { ...prev, [key]: { startedAt: null, endedAt: null } };
-      return { ...prev, [key]: { startedAt: new Date(), endedAt: null } };
+      const c = prev[kp] || { startedAt: null, endedAt: null };
+      if (c.startedAt) return { ...prev, [kp]: { startedAt: null, endedAt: null } };
+      return { ...prev, [kp]: { startedAt: new Date(), endedAt: null } };
     });
   }
   function toggleEnd(i) {
@@ -1338,7 +1366,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v10 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v11 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
