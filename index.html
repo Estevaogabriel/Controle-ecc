@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v20 — numero correto do Kleiton (teatro) readicionado
+// BUILD v21 — botao WhatsApp nao aparece nos Circulos (so na palestra)
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -114,6 +114,8 @@ const PALESTRANTES = [{"m": "set me free", "n": "Kleiton (Teatro)", "wa": "55849
 function palestranteD(titulo) {
   if (!titulo) return null;
   var t = titulo.toLowerCase();
+  // O botão é só para a PALESTRA/peça em si, não para os CÍRCULOS do mesmo tema.
+  if (t.indexOf("círculo") !== -1 || t.indexOf("circulo") !== -1) return null;
   for (var i = 0; i < PALESTRANTES.length; i++) {
     if (t.indexOf(PALESTRANTES[i].m) !== -1) return PALESTRANTES[i];
   }
@@ -1530,7 +1532,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v20 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v21 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
