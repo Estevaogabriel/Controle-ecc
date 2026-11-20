@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>XXXII ECC — Controle do Roteiro</title>
+<title>XXIV EJC — Controle do Roteiro</title>
 <style>
   html, body { margin: 0; padding: 0; background: #ECEEF1; }
   #root { min-height: 100vh; }
@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v12 — rebrand "Cadência": design sereno e clean (Inter, sálvia/ardósia)
+// BUILD v13 — roteiro XXIV EJC; titulo atualizado
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -86,7 +86,7 @@ function getRole() {
 
 
 // ─────────────────────────────────────────────────────────────
-// XXXII ENCONTRO DE CASAIS COM CRISTO — Controle de Atividades
+// XXIV ENCONTRO DE JOVENS COM CRISTO — Controle de Atividades
 // Modelo: cada atividade tem status (aguardando / em andamento /
 // encerrada). O atraso ("prejuízo") de cada atividade é o tempo
 // que ela passou do horário previsto de término SEM ter sido
@@ -98,6 +98,7 @@ function getRole() {
 // aba → formato CSV → Publicar. Cole a URL resultante aqui embaixo.
 // Colunas esperadas (com cabeçalho): dia,dia_label,data,hora,local,tempo,evento
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqiTlfdQ2EHEhoi_VVVtaBNazkx5cEWz21X2na4-peqIDe5mNj3xo4J2YI4t6i08lPV9QHF92XCNcc/pub?gid=1780870420&single=true&output=csv";
+const LOGO_SRC = "data:image/png;base64,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";
 
 // Paleta para colorir locais. Locais não listados recebem cor estável por nome.
 const LOCAL_COLORS_BASE = {
@@ -724,7 +725,7 @@ function App() {
       window.XLSX.utils.book_append_sheet(wb, ws, d.label.slice(0, 28));
     });
 
-    window.XLSX.writeFile(wb, "Controle_ECC_XXXII.xlsx");
+    window.XLSX.writeFile(wb, "Controle_EJC_XXIV.xlsx");
   }
 
   // ── Reset: zera todos os dados (local + Firebase) ──
@@ -756,9 +757,9 @@ function App() {
         <header style={S.header}>
           <div style={S.headerInner}>
             <div style={S.brandRow}>
-              <div style={S.cross} aria-hidden>✝</div>
+              <img src={LOGO_SRC} alt="Igreja de Cristo" style={S.logo} />
               <div>
-                <div style={S.kicker}>Cadência · XXXII ECC</div>
+                <div style={S.kicker}>Cadência · XXIV EJC</div>
                 <h1 style={S.title}>Controle do Roteiro</h1>
               </div>
             </div>
@@ -795,9 +796,9 @@ function App() {
       <header style={S.header}>
         <div style={S.headerInner}>
           <div style={S.brandRow}>
-            <div style={S.cross} aria-hidden>✝</div>
+            <img src={LOGO_SRC} alt="Igreja de Cristo" style={S.logo} />
             <div>
-              <div style={S.kicker}>Cadência · XXXII ECC</div>
+              <div style={S.kicker}>Cadência · XXIV EJC</div>
               <h1 style={S.title}>Controle do Roteiro</h1>
               <span style={{ ...S.modeBanner, background: isController ? "#4C7A6B" : "#5A6B74", color: "#fff" }}>
                 {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
@@ -1222,6 +1223,7 @@ const S = {
   headerInner: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   brandRow: { display: "flex", gap: 13, alignItems: "center" },
   cross: { fontSize: 22, color: C.sage, lineHeight: 1 },
+  logo: { height: 40, width: "auto", display: "block", flexShrink: 0 },
   kicker: { fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "#9FB0B8", fontWeight: 600 },
   title: { fontSize: 21, margin: "3px 0 0", fontWeight: 700, letterSpacing: -0.3 },
   clock: { textAlign: "right" },
@@ -1394,7 +1396,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v12 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v13 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
