@@ -73,15 +73,23 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v14 — logo Igreja de Cristo no header
+// BUILD v16 — acesso por senha (Area da Recepcao) + escala
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
-function getRole() {
+// Senha da Área da Recepção (modo edição). Troque aqui se quiser outra.
+const SENHA_RECEPCAO = "ejc2026";
+
+// Começa em modo controle se: já autenticou nesta sessão, ou veio com ?mode=control.
+function rolInicialControle() {
+  try {
+    if (sessionStorage.getItem("ecc-control") === "1") return true;
+  } catch (e) {}
   try {
     const p = new URLSearchParams(window.location.search);
-    return p.get("mode") === "control" ? "control" : "view";
-  } catch (e) { return "view"; }
+    if (p.get("mode") === "control") return true;
+  } catch (e) {}
+  return false;
 }
 
 
@@ -304,8 +312,22 @@ function App() {
   // ── Sincronização compartilhada (Firebase) ──
   // marks guarda objetos Date localmente; no Firebase gravamos timestamps.
   const [marks, setMarksLocal] = useState({});
-  const role = getRole(); // "control" (você) ou "view" (visitantes)
-  const isController = role === "control";
+  // Modo controle agora é por senha (Área da Recepção), não por link.
+  const [isController, setIsController] = useState(rolInicialControle);
+  function entrarRecepcao() {
+    const tent = window.prompt("Área da Recepção — digite a senha para editar:");
+    if (tent === null) return; // cancelou
+    if (tent === SENHA_RECEPCAO) {
+      try { sessionStorage.setItem("ecc-control", "1"); } catch (e) {}
+      setIsController(true);
+    } else {
+      window.alert("Senha incorreta.");
+    }
+  }
+  function sairRecepcao() {
+    try { sessionStorage.removeItem("ecc-control"); } catch (e) {}
+    setIsController(false);
+  }
   const fbStatus = window.__eccStatus || (window.__eccDB ? "online" : "sem-config");
 
   // Lê o Firebase e converte timestamps -> Date
@@ -802,15 +824,24 @@ function App() {
             <div>
               <div style={S.kicker}>Cadência · XXIV EJC</div>
               <h1 style={S.title}>Controle do Roteiro</h1>
-              <span style={{ ...S.modeBanner, background: isController ? "#4C7A6B" : "#5A6B74", color: "#fff" }}>
-                {isController ? "● MODO CONTROLE" : "👁 MODO VISUALIZAÇÃO"}
-              </span>
+              {isController && (
+                <span style={{ ...S.modeBanner, background: "#4C7A6B", color: "#fff" }}>
+                  ● MODO EDIÇÃO
+                </span>
+              )}
               <span style={{
                 ...S.modeBanner, marginLeft: 6,
                 background: fbStatus === "online" ? "#1E2A33" : "#B4544A", color: "#fff",
               }}>
                 {fbStatus === "online" ? "☁ SINCRONIZADO" : fbStatus === "sem-config" ? "⚠ OFFLINE (sem config)" : "⚠ OFFLINE (erro)"}
               </span>
+              <div>
+                {isController ? (
+                  <button style={S.recBtnOut} onClick={sairRecepcao}>Sair da edição</button>
+                ) : (
+                  <button style={S.recBtn} onClick={entrarRecepcao}>🔒 Área da Recepção</button>
+                )}
+              </div>
             </div>
           </div>
           <div style={S.clock}>
@@ -1365,6 +1396,8 @@ const S = {
   btnStart: { width: "100%", border: "none", background: C.ink, color: "#fff", fontSize: 16, fontWeight: 700, padding: "15px", borderRadius: 12, cursor: "pointer", letterSpacing: 0.2 },
   viewOnlyNote: { textAlign: "center", fontSize: 13, fontWeight: 600, color: C.sage, background: C.sageSoft, padding: "13px", borderRadius: 12 },
   modeBanner: { fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, padding: "3px 11px", borderRadius: 999, marginTop: 8, display: "inline-block" },
+  recBtn: { marginTop: 10, border: `1px solid ${C.sage}`, background: C.sage, color: "#fff", fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 999, cursor: "pointer" },
+  recBtnOut: { marginTop: 10, border: "1px solid rgba(255,255,255,0.35)", background: "transparent", color: "#9FB0B8", fontSize: 12, fontWeight: 600, padding: "7px 13px", borderRadius: 999, cursor: "pointer" },
 
   list: { padding: "10px 14px 0", background: C.surface },
   row: { display: "flex", alignItems: "stretch", gap: 11, padding: "12px 8px", borderRadius: 11, position: "relative", borderBottom: `1px solid ${C.line}` },
@@ -1452,7 +1485,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v14 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v16 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
