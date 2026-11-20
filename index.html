@@ -73,7 +73,7 @@
 </script>
 
 <script type="text/plain" id="ecc-app-source">
-// BUILD v18 — removido WhatsApp do Kleiton (numero inexistente)
+// BUILD v19 — mensagem padrao pre-preenchida no WhatsApp do palestrante
 const { useState, useEffect, useMemo, useRef } = React;
 
 // Papel do usuário: ?mode=control na URL = controlador; senão, visualizador.
@@ -118,6 +118,16 @@ function palestranteD(titulo) {
     if (t.indexOf(PALESTRANTES[i].m) !== -1) return PALESTRANTES[i];
   }
   return null;
+}
+// Monta o link do WhatsApp com mensagem pré-preenchida para o palestrante.
+// row: atividade (tem .startMs e .title); nowMsArg: "agora" projetado no dia.
+function waLinkPara(pal, row, nowMsArg) {
+  var faltamSec = Math.round((row.startMs - nowMsArg) / 1000);
+  var faltamMin = Math.max(0, Math.round(faltamSec / 60));
+  var msg = "Olá, " + pal.n + ", sua atividade está próxima. " +
+            (faltamMin <= 0 ? "Já vai começar!" : "Será em " + faltamMin + " minuto" + (faltamMin === 1 ? "" : "s") + ".") +
+            " Estamos aguardando na sala da recepção aos palestrantes.";
+  return "https://wa.me/" + pal.wa + "?text=" + encodeURIComponent(msg);
 }
 // Paleta para colorir locais. Locais não listados recebem cor estável por nome.
 const LOCAL_COLORS_BASE = {
@@ -1005,7 +1015,7 @@ function App() {
             </div>
             {palestranteD(currentRow.title) && (
               <a
-                href={"https://wa.me/" + palestranteD(currentRow.title).wa}
+                href={waLinkPara(palestranteD(currentRow.title), currentRow, nowMs)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={S.waBtn}
@@ -1189,7 +1199,7 @@ function App() {
                   )}
                   {palestranteD(r.title) && (
                     <a
-                      href={"https://wa.me/" + palestranteD(r.title).wa}
+                      href={waLinkPara(palestranteD(r.title), r, nowMs)}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -1520,7 +1530,7 @@ else {
 
   function compileAndRun() {
     try {
-      console.log("[ECC] Compilando — BUILD v18 (Babel dinâmico)");
+      console.log("[ECC] Compilando — BUILD v19 (Babel dinâmico)");
       var src = document.getElementById("ecc-app-source").textContent;
 
       // Usa o runtime CLÁSSICO do JSX: compila <x/> para React.createElement(x),
